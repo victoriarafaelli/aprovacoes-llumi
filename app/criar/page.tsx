@@ -23,6 +23,9 @@ const EMPTY_CONTENT = (): ContentFormData => ({
   copy_text:       '',
   video_script:    '',
   observations:    '',
+  publish_date:    '',
+  publish_time:    '',
+  reference_url:   '',
 })
 
 // ─── Seletor de redes com multi-select ───────────────────────────────────────
@@ -248,6 +251,49 @@ function ContentCard({
           </div>
         )}
 
+        {/* Data e horário de publicação */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Data de publicação{' '}
+              <span className="font-normal text-gray-300">(opcional)</span>
+            </label>
+            <input
+              type="date"
+              value={content.publish_date}
+              onChange={(e) => onChange({ ...content, publish_date: e.target.value })}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+            />
+          </div>
+          <div className="w-36">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Horário{' '}
+              <span className="font-normal text-gray-300">(opcional)</span>
+            </label>
+            <input
+              type="time"
+              value={content.publish_time}
+              onChange={(e) => onChange({ ...content, publish_time: e.target.value })}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Link de referência */}
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Link de referência{' '}
+            <span className="font-normal text-gray-300">(opcional)</span>
+          </label>
+          <input
+            type="url"
+            placeholder="https://www.tiktok.com/..."
+            value={content.reference_url}
+            onChange={(e) => onChange({ ...content, reference_url: e.target.value })}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+          />
+        </div>
+
         {/* Observações — sempre opcional */}
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -255,7 +301,7 @@ function ContentCard({
             <span className="font-normal text-gray-300">(opcional)</span>
           </label>
           <textarea
-            placeholder="Referências, diretrizes visuais, datas específicas..."
+            placeholder="Diretrizes visuais, contexto, instruções para o cliente..."
             value={content.observations}
             onChange={(e) => onChange({ ...content, observations: e.target.value })}
             rows={2}

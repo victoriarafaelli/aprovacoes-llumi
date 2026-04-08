@@ -12,6 +12,8 @@ import {
   NETWORK_LABELS,
   NETWORK_COLORS,
   isVideoFormat,
+  formatDate,
+  ensureHttps,
 } from '@/types'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
@@ -94,10 +96,22 @@ function ApprovalCard({
           )}
         </div>
 
-        {/* Título */}
-        <h3 className="font-semibold text-gray-900 text-base leading-snug">
-          {content.title}
-        </h3>
+        {/* Título + data/hora */}
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-semibold text-gray-900 text-base leading-snug">
+            {content.title}
+          </h3>
+          {(content.publish_date || content.publish_time) && (
+            <div className="text-right shrink-0">
+              {content.publish_date && (
+                <p className="text-xs font-medium text-gray-700">{formatDate(content.publish_date)}</p>
+              )}
+              {content.publish_time && (
+                <p className="text-xs text-gray-400">{content.publish_time}</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Copy (para formatos não-vídeo) */}
         {!isVideo && content.copy_text && (
@@ -125,6 +139,25 @@ function ApprovalCard({
               </div>
             )}
           </div>
+        )}
+
+        {/* Link de referência — clicável pelo cliente */}
+        {content.reference_url && (
+          <a
+            href={ensureHttps(content.reference_url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2.5 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <span className="flex-1 truncate">Ver referência</span>
+            <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
         )}
 
         {/* Observações */}

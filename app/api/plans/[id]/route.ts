@@ -22,3 +22,32 @@ export async function GET(
 
   return NextResponse.json(plan)
 }
+
+// DELETE /api/plans/[id] — Remove um plano e seus conteúdos (cascade no banco)
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const supabase = createServerClient()
+
+  // Verifica se o plano existe antes de deletar
+  const { data: plan, error: fetchError } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !plan) {
+    return NextResponse.json({ error: 'Planejamento não encontrado' }, { status: 404 })
+  }
+
+  // O ON DELETE CASCADE no banco já remove os conteúdos relacionados automaticamente
+  const { error } = await supabase.from('plans').delete().eq('id', id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}

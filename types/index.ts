@@ -53,29 +53,22 @@ export const NETWORK_FORMATS: Record<SocialNetwork, ContentType[]> = {
   x_threads: ['post', 'video'],
 }
 
-// Grupos de formatos equivalentes entre redes (tratados como intercambiáveis)
-// Ex: "reels" no Instagram = "video" no TikTok = "shorts" no YouTube
+// Grupos de formatos equivalentes entre redes
 export const FORMAT_EQUIVALENCE_GROUPS: ContentType[][] = [
   ['reels', 'video', 'shorts'],
 ]
 
-// Formatos que são vídeo → mostram roteiro, sem copy
+// Formatos que são vídeo
 export const VIDEO_FORMATS: ContentType[] = ['reels', 'video', 'shorts']
 
 export function isVideoFormat(type: ContentType): boolean {
   return VIDEO_FORMATS.includes(type)
 }
 
-/**
- * Retorna os formatos compatíveis com TODAS as redes selecionadas.
- * Usa os grupos de equivalência para tratar reels/video/shorts como o mesmo.
- * O nome do formato exibido segue a nomenclatura da primeira rede selecionada.
- */
 export function getCompatibleFormats(networks: SocialNetwork[]): ContentType[] {
   if (networks.length === 0) return []
   if (networks.length === 1) return NETWORK_FORMATS[networks[0]]
 
-  // Expande um formato para seu grupo de equivalência
   const equivalentGroup = (fmt: ContentType): Set<ContentType> => {
     for (const group of FORMAT_EQUIVALENCE_GROUPS) {
       if (group.includes(fmt)) return new Set(group)
@@ -83,8 +76,7 @@ export function getCompatibleFormats(networks: SocialNetwork[]): ContentType[] {
     return new Set([fmt])
   }
 
-  // Usa os formatos da primeira rede como base e filtra o que é compatível com as demais
-  const baseFormats = NETWORK_FORMATS[networks[0]]
+  const baseFormats  = NETWORK_FORMATS[networks[0]]
   const otherNetworks = networks.slice(1)
 
   return baseFormats.filter((fmt) => {
@@ -95,10 +87,6 @@ export function getCompatibleFormats(networks: SocialNetwork[]): ContentType[] {
   })
 }
 
-/**
- * Verifica se adicionar uma rede mantém pelo menos um formato compatível.
- * Útil para indicar na UI se a rede é adicionável ou incompatível.
- */
 export function isNetworkCompatible(
   selectedNetworks: SocialNetwork[],
   candidate: SocialNetwork
@@ -129,7 +117,7 @@ export const CONTENT_TYPE_COLORS: Record<ContentType, string> = {
 
 // ─── Status ───────────────────────────────────────────────────────────────────
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
-export type PlanStatus = 'draft' | 'sent' | 'completed'
+export type PlanStatus     = 'draft' | 'sent' | 'completed'
 
 // ─── Entidades do banco ───────────────────────────────────────────────────────
 export interface Plan {
@@ -146,11 +134,15 @@ export interface Content {
   id: string
   plan_id: string
   title: string
-  social_networks: SocialNetwork[]   // array — múltiplas redes por conteúdo
+  social_networks: SocialNetwork[]
   type: ContentType
   copy_text: string | null
   video_script: string | null
   observations: string | null
+  // Novos campos
+  publish_date: string | null    // formato ISO: "YYYY-MM-DD"
+  publish_time: string | null    // formato "HH:MM"
+  reference_url: string | null   // URL externa de referência
   approval_status: ApprovalStatus
   order_position: number
   created_at: string
@@ -159,14 +151,18 @@ export interface Content {
 // ─── Formulário de criação ────────────────────────────────────────────────────
 export interface ContentFormData {
   title: string
-  social_networks: SocialNetwork[]   // array
+  social_networks: SocialNetwork[]
   type: ContentType
   copy_text: string
   video_script: string
   observations: string
+  // Novos campos
+  publish_date: string
+  publish_time: string
+  reference_url: string
 }
 
-// ─── Helpers de stats ─────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 export interface PlanStats {
   total: number
   approved: number
@@ -181,4 +177,17 @@ export function getPlanStats(contents: Pick<Content, 'approval_status'>[]): Plan
     rejected: contents.filter((c) => c.approval_status === 'rejected').length,
     pending:  contents.filter((c) => c.approval_status === 'pending').length,
   }
+}
+
+/** Formata "YYYY-MM-DD" → "DD/MM/YYYY" para exibição */
+export function formatDate(iso: string | null): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
+/** Garante que uma string de URL tenha protocolo */
+export function ensureHttps(url: string): string {
+  if (!url) return ''
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`
 }

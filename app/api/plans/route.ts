@@ -55,11 +55,14 @@ export async function POST(request: NextRequest) {
   const contentsToInsert = contents.map((content, index) => ({
     plan_id:         plan.id,
     title:           content.title,
-    social_networks: content.social_networks,   // array
+    social_networks: content.social_networks,
     type:            content.type,
-    copy_text:       content.copy_text || null,
+    copy_text:       content.copy_text    || null,
     video_script:    content.video_script || null,
     observations:    content.observations || null,
+    publish_date:    content.publish_date || null,
+    publish_time:    content.publish_time || null,
+    reference_url:   content.reference_url || null,
     approval_status: 'pending' as const,
     order_position:  index,
   }))

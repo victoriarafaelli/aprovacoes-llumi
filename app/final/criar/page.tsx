@@ -21,6 +21,52 @@ import {
   isDirectImageUrl,
 } from '@/types/final'
 
+// ─── Helpers de tipo MIME ─────────────────────────────────────────────────────
+
+/** Mapeamento extensão → MIME para quando file.type está vazio (comum no Windows/Firefox com .mov) */
+const EXT_TO_MIME: Record<string, string> = {
+  mp4:  'video/mp4',
+  m4v:  'video/mp4',
+  webm: 'video/webm',
+  mov:  'video/quicktime',
+  avi:  'video/x-msvideo',
+  mkv:  'video/x-matroska',
+  jpg:  'image/jpeg',
+  jpeg: 'image/jpeg',
+  png:  'image/png',
+  webp: 'image/webp',
+  gif:  'image/gif',
+}
+
+/**
+ * Resolve o tipo MIME real do arquivo.
+ * Se file.type estiver vazio (acontece com .mov no Windows/Firefox),
+ * usa a extensão do nome do arquivo como fallback.
+ */
+function resolveContentType(file: File): string {
+  if (file.type && file.type.length > 0) return file.type
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return EXT_TO_MIME[ext] ?? ''
+}
+
+/**
+ * Retorna o Content-Type que o Supabase Storage realmente aceita no PUT.
+ *
+ * Problema: Supabase Storage rejeita video/quicktime (MOV) com status 400.
+ * Solução: enviamos o arquivo com Content-Type video/mp4, que é aceito.
+ * O arquivo .mov ainda é salvo com a extensão correta no nome.
+ */
+const STORAGE_COMPAT: Record<string, string> = {
+  'video/quicktime':  'video/mp4',  // MOV → enviado como MP4 para o Storage
+  'video/x-msvideo':  'video/mp4',  // AVI → enviado como MP4
+  'video/x-matroska': 'video/webm', // MKV → enviado como WebM
+  'video/mpeg':       'video/mp4',  // MPEG → enviado como MP4
+}
+
+function getStorageContentType(mimeType: string): string {
+  return STORAGE_COMPAT[mimeType] ?? mimeType
+}
+
 // ─── Upload de um arquivo único ───────────────────────────────────────────────
 // O arquivo vai DIRETO do navegador para o Supabase Storage via URL assinada.
 // O servidor Next.js só gera o token — nunca toca no conteúdo do arquivo.
@@ -51,14 +97,26 @@ function FileUploadSlot({
     setProgress(0)
     setUploadError(null)
 
-    // ── Passo 1: pedir URL assinada ao servidor (requisição JSON pequena) ──
+    // Resolve o tipo MIME (corrige file.type vazio em Windows/Firefox com .mov)
+    const contentType = resolveContentType(file)
+    if (!contentType) {
+      setUploadError(`Formato não reconhecido: "${file.name}". Use MP4, WebM, MOV, JPG ou PNG.`)
+      setProgress(null)
+      return
+    }
+
+    // Tipo usado no PUT ao Supabase (video/quicktime → video/mp4, etc.)
+    const storageContentType = getStorageContentType(contentType)
+
+    // ── Passo 1: pedir URL assinada ao servidor (requisição JSON minúscula) ──
     let signedUrl: string
     let publicUrl: string
     try {
       const res = await fetch('/api/final-reviews/upload-url', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ folder, slot: slotKey, contentType: file.type }),
+        // Envia o tipo real para que o backend escolha a extensão certa no nome
+        body:    JSON.stringify({ folder, slot: slotKey, contentType }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -74,12 +132,14 @@ function FileUploadSlot({
       return
     }
 
-    // ── Passo 2: upload direto para o Supabase Storage via XHR (com progresso) ──
+    // ── Passo 2: PUT direto para o Supabase Storage via XHR ──────────────────
+    // Usa storageContentType (video/mp4) mesmo para arquivos .mov,
+    // porque o Supabase Storage rejeita video/quicktime com status 400.
     await new Promise<void>((resolve) => {
       const xhr = new XMLHttpRequest()
       xhrRef.current = xhr
 
-      // Progresso real de upload
+      // Progresso real de upload (funciona com XHR, não com fetch)
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
           setProgress(Math.round((e.loaded / e.total) * 100))
@@ -91,14 +151,27 @@ function FileUploadSlot({
           onChange(publicUrl)
           setProgress(null)
         } else {
-          setUploadError(`Erro no upload (${xhr.status}). Tente novamente.`)
+          // Lê a mensagem real do Supabase para exibir um erro útil
+          let storageError = ''
+          try {
+            const parsed = JSON.parse(xhr.responseText)
+            storageError = parsed.error ?? parsed.message ?? parsed.statusCode ?? ''
+          } catch { /* responseText não é JSON */ }
+
+          if (storageError) {
+            setUploadError(`Upload falhou: ${storageError}`)
+          } else if (xhr.status === 400) {
+            setUploadError(`Upload rejeitado (400). Formato "${file.name.split('.').pop()?.toUpperCase()}" pode não ser suportado. Tente converter para MP4.`)
+          } else {
+            setUploadError(`Erro ${xhr.status} no upload. Tente novamente.`)
+          }
           setProgress(null)
         }
         resolve()
       })
 
       xhr.addEventListener('error', () => {
-        setUploadError('Erro de conexão durante o upload.')
+        setUploadError('Erro de conexão durante o upload. Verifique sua internet e tente novamente.')
         setProgress(null)
         resolve()
       })
@@ -108,9 +181,9 @@ function FileUploadSlot({
         resolve()
       })
 
-      // PUT direto no Supabase Storage — nenhum byte passa pelo Next.js
       xhr.open('PUT', signedUrl)
-      xhr.setRequestHeader('Content-Type', file.type)
+      xhr.setRequestHeader('Content-Type', storageContentType)
+      xhr.setRequestHeader('x-upsert', 'true') // permite sobrescrever se o slot já existir
       xhr.send(file)
     })
 

@@ -2,26 +2,40 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { STORAGE_BUCKET } from '@/lib/supabase-storage'
 
-// Content-Type aceitos → extensão de arquivo
+/**
+ * Mapeamento: Content-Type aceito → extensão usada no nome do arquivo.
+ *
+ * IMPORTANTE: para vídeos nativos de câmera (MOV/QuickTime), o frontend
+ * remapeia o Content-Type para video/mp4 antes do PUT ao Supabase Storage
+ * (veja getStorageContentType no criar/page.tsx), mas ainda envia o tipo
+ * original aqui para que possamos salvar o arquivo com a extensão correta.
+ */
 const ALLOWED_TYPES: Record<string, string> = {
-  'image/jpeg':      '.jpg',
-  'image/jpg':       '.jpg',
-  'image/png':       '.png',
-  'image/webp':      '.webp',
-  'image/gif':       '.gif',
-  'video/mp4':       '.mp4',
-  'video/webm':      '.webm',
-  'video/quicktime': '.mov',   // iPhone / macOS
-  'video/x-msvideo': '.avi',
-  'video/ogg':       '.ogv',
-  'video/x-matroska':'.mkv',
+  // Imagens
+  'image/jpeg':               '.jpg',
+  'image/jpg':                '.jpg',
+  'image/png':                '.png',
+  'image/webp':               '.webp',
+  'image/gif':                '.gif',
+  // Vídeos — tipos que o browser pode reportar
+  'video/mp4':                '.mp4',
+  'video/x-m4v':              '.mp4',
+  'video/webm':               '.webm',
+  'video/quicktime':          '.mov',   // iPhone / macOS (Safari, Chrome)
+  'video/x-msvideo':          '.avi',
+  'video/x-matroska':         '.mkv',
+  'video/ogg':                '.ogv',
+  'video/mpeg':               '.mpeg',
+  // Fallback: Windows/Firefox às vezes reportam octet-stream para MOV
+  // Nesses casos o frontend já resolveu via extensão antes de chegar aqui
+  'application/octet-stream': '.bin',   // aceito como último recurso
 }
 
 /**
  * POST /api/final-reviews/upload-url
  *
- * Gera uma URL assinada para o navegador fazer upload direto ao Supabase Storage
- * sem passar o arquivo pelo servidor Next.js (evita limites de tamanho e timeout).
+ * Gera uma URL assinada para o navegador fazer upload DIRETO ao Supabase Storage
+ * sem passar o arquivo pelo servidor Next.js (sem limite de tamanho ou timeout).
  *
  * Body JSON: { folder: string, slot: string, contentType: string }
  * Retorna:   { signedUrl: string, publicUrl: string, path: string }
@@ -34,10 +48,19 @@ export async function POST(request: NextRequest) {
     contentType: string
   }
 
-  // ── Validações ──────────────────────────────────────────────────────────
-  if (!folder || !slot || !contentType) {
+  // ── Validações ──────────────────────────────────────────────────────────────
+
+  if (!folder || !slot) {
     return NextResponse.json(
-      { error: 'Parâmetros obrigatórios: folder, slot, contentType.' },
+      { error: 'Parâmetros obrigatórios: folder, slot.' },
+      { status: 400 }
+    )
+  }
+
+  // Tipo pode chegar vazio se o SO não reportou MIME — frontend deve resolver antes
+  if (!contentType) {
+    return NextResponse.json(
+      { error: 'Não foi possível determinar o tipo do arquivo. Verifique se o formato é suportado.' },
       { status: 400 }
     )
   }
@@ -52,16 +75,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Slot inválido.' }, { status: 400 })
   }
 
-  const ext = ALLOWED_TYPES[contentType]
+  const ext = ALLOWED_TYPES[contentType.toLowerCase()]
   if (!ext) {
+    // Devolve o tipo recebido para facilitar diagnóstico
     return NextResponse.json(
-      { error: 'Tipo de arquivo não suportado. Use JPG, PNG, WebP, GIF, MP4, WebM, MOV ou AVI.' },
+      {
+        error: `Formato não suportado: "${contentType}". Formatos aceitos: MP4, WebM, MOV, JPG, PNG, WebP, GIF.`,
+      },
       { status: 400 }
     )
   }
 
-  // ── Gera URL assinada ───────────────────────────────────────────────────
-  const path    = `${folder}/${slot}_${Date.now()}${ext}`
+  // ── Gera URL assinada ────────────────────────────────────────────────────────
+
+  // Para arquivos binários genéricos, usamos extensão baseada na detecção anterior
+  const path     = `${folder}/${slot}_${Date.now()}${ext}`
   const supabase = createServerClient()
 
   const { data, error } = await supabase.storage
@@ -69,14 +97,13 @@ export async function POST(request: NextRequest) {
     .createSignedUploadUrl(path)
 
   if (error || !data) {
-    console.error('Erro ao gerar signed URL:', error?.message)
+    console.error('[upload-url] Erro Supabase:', error?.message)
     return NextResponse.json(
       { error: error?.message ?? 'Não foi possível gerar o link de upload.' },
       { status: 500 }
     )
   }
 
-  // URL pública permanente — usada após o upload concluir
   const { data: publicUrlData } = supabase.storage
     .from(STORAGE_BUCKET)
     .getPublicUrl(path)

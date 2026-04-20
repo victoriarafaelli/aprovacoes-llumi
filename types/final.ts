@@ -63,9 +63,9 @@ export const MEDIA_ACCEPT: Record<MediaKind, 'image/*' | 'video/*' | ''> = {
   none:  '',
 }
 
-/** Dica de formato exibida no input */
+/** Dica de formato exibida no input de upload */
 export const MEDIA_ACCEPT_HINT: Record<MediaKind, string> = {
-  video: 'MP4, WebM, MOV',
+  video: 'MP4 ou WebM recomendados · MOV aceito',
   image: 'JPG, PNG, WebP, GIF',
   multi: 'JPG, PNG, WebP, GIF',
   none:  '',

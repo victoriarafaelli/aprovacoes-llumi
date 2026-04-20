@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { Plan, Content, getPlanStats } from '@/types'
+import AppTabs from '@/components/AppTabs'
 
 type PlanWithContents = Plan & { contents: Pick<Content, 'approval_status'>[] }
 
@@ -324,6 +325,7 @@ export default function HomePage() {
       )}
 
       <main className="min-h-screen bg-gray-50">
+        <AppTabs />
         {/* Header */}
         <div className="bg-white border-b border-gray-100">
           <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between">

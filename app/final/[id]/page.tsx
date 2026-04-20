@@ -78,7 +78,13 @@ function MediaViewer({ url }: { url: string }) {
   if (isVid) {
     return (
       <div className="w-full rounded-xl overflow-hidden bg-black">
-        <video src={safe} controls className="w-full max-h-[480px]" />
+        <video
+          src={safe}
+          controls
+          playsInline
+          preload="metadata"
+          className="w-full max-h-[480px]"
+        />
       </div>
     )
   }

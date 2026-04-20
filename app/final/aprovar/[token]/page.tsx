@@ -52,7 +52,13 @@ function MediaViewer({ url }: { url: string }) {
   if (isVid) {
     return (
       <div className="w-full rounded-xl overflow-hidden bg-black">
-        <video src={safe} controls className="w-full max-h-[480px]" />
+        <video
+          src={safe}
+          controls
+          playsInline          // evita fullscreen forçado no iOS Safari
+          preload="metadata"   // carrega dimensões/duração sem baixar o vídeo inteiro
+          className="w-full max-h-[480px]"
+        />
       </div>
     )
   }

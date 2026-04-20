@@ -22,6 +22,9 @@ import {
 } from '@/types/final'
 
 // ─── Upload de um arquivo único ───────────────────────────────────────────────
+// O arquivo vai DIRETO do navegador para o Supabase Storage via URL assinada.
+// O servidor Next.js só gera o token — nunca toca no conteúdo do arquivo.
+// Isso elimina limites de tamanho e timeout do Vercel/Next.js para vídeos.
 function FileUploadSlot({
   accept,
   acceptHint,
@@ -33,47 +36,98 @@ function FileUploadSlot({
 }: {
   accept: 'image/*' | 'video/*' | ''
   acceptHint: string
-  value: string          // URL atual no Storage ('' se ainda não enviado)
+  value: string          // URL pública no Storage ('' se ainda não enviado)
   onChange: (url: string) => void
   folder: string         // upload session ID (32 hex chars)
   slotKey: string        // identificador único: "itemIdx_slotIdx"
   label?: string         // ex: "Slide 1"
 }) {
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [progress,     setProgress]     = useState<number | null>(null) // 0-100 ou null
+  const [uploadError,  setUploadError]  = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const xhrRef   = useRef<XMLHttpRequest | null>(null)
 
   const handleFile = async (file: File) => {
-    setUploading(true)
+    setProgress(0)
     setUploadError(null)
 
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('folder', folder)
-    fd.append('slot', slotKey)
-
+    // ── Passo 1: pedir URL assinada ao servidor (requisição JSON pequena) ──
+    let signedUrl: string
+    let publicUrl: string
     try {
-      const res  = await fetch('/api/final-reviews/upload', { method: 'POST', body: fd })
+      const res = await fetch('/api/final-reviews/upload-url', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ folder, slot: slotKey, contentType: file.type }),
+      })
       const data = await res.json()
       if (!res.ok) {
-        setUploadError(data.error ?? 'Erro no upload.')
+        setUploadError(data.error ?? 'Erro ao iniciar upload.')
+        setProgress(null)
         return
       }
-      onChange(data.url)
+      signedUrl = data.signedUrl
+      publicUrl = data.publicUrl
     } catch {
-      setUploadError('Erro de conexão. Tente novamente.')
-    } finally {
-      setUploading(false)
+      setUploadError('Erro de conexão ao iniciar upload.')
+      setProgress(null)
+      return
     }
+
+    // ── Passo 2: upload direto para o Supabase Storage via XHR (com progresso) ──
+    await new Promise<void>((resolve) => {
+      const xhr = new XMLHttpRequest()
+      xhrRef.current = xhr
+
+      // Progresso real de upload
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          setProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      })
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onChange(publicUrl)
+          setProgress(null)
+        } else {
+          setUploadError(`Erro no upload (${xhr.status}). Tente novamente.`)
+          setProgress(null)
+        }
+        resolve()
+      })
+
+      xhr.addEventListener('error', () => {
+        setUploadError('Erro de conexão durante o upload.')
+        setProgress(null)
+        resolve()
+      })
+
+      xhr.addEventListener('abort', () => {
+        setProgress(null)
+        resolve()
+      })
+
+      // PUT direto no Supabase Storage — nenhum byte passa pelo Next.js
+      xhr.open('PUT', signedUrl)
+      xhr.setRequestHeader('Content-Type', file.type)
+      xhr.send(file)
+    })
+
+    xhrRef.current = null
   }
 
   const handleRemove = () => {
+    // Cancela upload em andamento se houver
+    if (xhrRef.current) { xhrRef.current.abort(); xhrRef.current = null }
     onChange('')
-    // Limpa o input para permitir re-selecionar o mesmo arquivo
+    setProgress(null)
+    setUploadError(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  const isImage = value && isDirectImageUrl(value)
+  const uploading = progress !== null
+  const isImage   = value && isDirectImageUrl(value)
 
   return (
     <div className="flex flex-col gap-1">
@@ -87,12 +141,29 @@ function FileUploadSlot({
       />
 
       {uploading ? (
-        /* Estado: enviando */
-        <div className="border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-5 flex items-center gap-3">
-          <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
-          <span className="text-sm text-indigo-600 font-medium">
-            {label ? `${label} — ` : ''}Enviando...
-          </span>
+        /* Estado: enviando — barra de progresso real */
+        <div className="border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-indigo-600 font-medium">
+              {label ? `${label} — ` : ''}Enviando...
+            </span>
+            <span className="text-xs text-indigo-400 font-semibold tabular-nums">
+              {progress}%
+            </span>
+          </div>
+          <div className="h-1.5 bg-indigo-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-indigo-500 rounded-full transition-all duration-150"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="text-xs text-indigo-400 hover:text-red-500 self-end transition-colors"
+          >
+            Cancelar
+          </button>
         </div>
       ) : value ? (
         /* Estado: arquivo enviado */

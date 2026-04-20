@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { deleteStorageFolder } from '@/lib/supabase-storage'
 
 // GET /api/final-reviews/[id]
 export async function GET(
@@ -46,6 +47,7 @@ export async function PATCH(
 }
 
 // DELETE /api/final-reviews/[id]
+// Remove a review do banco E os arquivos do Supabase Storage
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -53,9 +55,10 @@ export async function DELETE(
   const { id } = await params
   const supabase = createServerClient()
 
+  // Busca a review para obter o storage_folder antes de excluir
   const { data, error: fetchError } = await supabase
     .from('final_reviews')
-    .select('id')
+    .select('id, storage_folder')
     .eq('id', id)
     .single()
 
@@ -63,6 +66,12 @@ export async function DELETE(
     return NextResponse.json({ error: 'Aprovação não encontrada' }, { status: 404 })
   }
 
+  // Remove arquivos do Storage (não bloqueia mesmo se falhar)
+  if (data.storage_folder) {
+    await deleteStorageFolder(data.storage_folder)
+  }
+
+  // Remove do banco (ON DELETE CASCADE remove os itens automaticamente)
   const { error } = await supabase.from('final_reviews').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import {
   FinalReviewItemFormData,
@@ -10,15 +10,240 @@ import {
   NETWORKS_ORDER,
   CONTENT_TYPE_LABELS,
   NETWORK_LABELS,
-  NETWORK_FORMATS,
   getCompatibleFormats,
   isNetworkCompatible,
   getMediaKind,
   EMPTY_ITEM,
   EMPTY_MEDIA_ITEM,
-  MEDIA_FIELD_LABELS,
   MediaKind,
+  MEDIA_ACCEPT,
+  MEDIA_ACCEPT_HINT,
+  isDirectImageUrl,
 } from '@/types/final'
+
+// ─── Upload de um arquivo único ───────────────────────────────────────────────
+function FileUploadSlot({
+  accept,
+  acceptHint,
+  value,
+  onChange,
+  folder,
+  slotKey,
+  label,
+}: {
+  accept: 'image/*' | 'video/*' | ''
+  acceptHint: string
+  value: string          // URL atual no Storage ('' se ainda não enviado)
+  onChange: (url: string) => void
+  folder: string         // upload session ID (32 hex chars)
+  slotKey: string        // identificador único: "itemIdx_slotIdx"
+  label?: string         // ex: "Slide 1"
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = async (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('folder', folder)
+    fd.append('slot', slotKey)
+
+    try {
+      const res  = await fetch('/api/final-reviews/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        setUploadError(data.error ?? 'Erro no upload.')
+        return
+      }
+      onChange(data.url)
+    } catch {
+      setUploadError('Erro de conexão. Tente novamente.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemove = () => {
+    onChange('')
+    // Limpa o input para permitir re-selecionar o mesmo arquivo
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  const isImage = value && isDirectImageUrl(value)
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Input oculto */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+      />
+
+      {uploading ? (
+        /* Estado: enviando */
+        <div className="border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-5 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
+          <span className="text-sm text-indigo-600 font-medium">
+            {label ? `${label} — ` : ''}Enviando...
+          </span>
+        </div>
+      ) : value ? (
+        /* Estado: arquivo enviado */
+        <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
+          {isImage ? (
+            /* Preview de imagem */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={value}
+              alt={label ?? 'Mídia'}
+              className="w-full max-h-52 object-contain bg-gray-100"
+            />
+          ) : (
+            /* Vídeo: sem preview, mostra ícone + indicação */
+            <div className="flex items-center gap-3 px-4 py-4">
+              <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Vídeo enviado</p>
+                <p className="text-xs text-gray-400">Será exibido embutido no link de aprovação</p>
+              </div>
+            </div>
+          )}
+
+          {/* Barra de ações */}
+          <div className="flex items-center justify-between px-3 py-2 bg-white border-t border-gray-100">
+            {label
+              ? <span className="text-xs text-gray-400 font-medium">{label}</span>
+              : <span className="text-xs text-green-600 font-medium">Enviado</span>
+            }
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="text-xs text-red-400 hover:text-red-600 transition-colors"
+              >
+                Remover
+              </button>
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+              >
+                Trocar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Estado: vazio — clique para selecionar */
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="w-full border-2 border-dashed border-gray-200 rounded-xl py-7 flex flex-col items-center gap-2 text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+        >
+          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+          <span className="text-sm font-medium">
+            {label
+              ? `${label} — Selecionar arquivo`
+              : accept === 'video/*' ? 'Selecionar vídeo' : 'Selecionar imagem'
+            }
+          </span>
+          <span className="text-xs text-gray-300">{acceptHint}</span>
+        </button>
+      )}
+
+      {uploadError && (
+        <p className="text-xs text-red-500 mt-0.5">{uploadError}</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Campos de upload por formato ─────────────────────────────────────────────
+function MediaUploadFields({
+  kind,
+  mediaItems,
+  onChange,
+  folder,
+  itemIndex,
+}: {
+  kind: MediaKind
+  mediaItems: MediaItem[]
+  onChange: (items: MediaItem[]) => void
+  folder: string
+  itemIndex: number
+}) {
+  if (kind === 'none') return null
+
+  const accept     = MEDIA_ACCEPT[kind]
+  const acceptHint = MEDIA_ACCEPT_HINT[kind]
+
+  // Vídeo ou imagem única
+  if (kind === 'video' || kind === 'image') {
+    const item = mediaItems[0] ?? EMPTY_MEDIA_ITEM()
+    return (
+      <FileUploadSlot
+        accept={accept}
+        acceptHint={acceptHint}
+        value={item.url}
+        onChange={(url) => onChange([{ url, label: '' }])}
+        folder={folder}
+        slotKey={`${itemIndex}_0`}
+      />
+    )
+  }
+
+  // Multi (carrossel / stories) — vários slides em sequência
+  return (
+    <div className="flex flex-col gap-3">
+      {mediaItems.map((item, slotIdx) => (
+        <div key={slotIdx}>
+          <FileUploadSlot
+            accept={accept}
+            acceptHint={acceptHint}
+            value={item.url}
+            onChange={(url) => {
+              onChange(mediaItems.map((m, i) => i === slotIdx ? { ...m, url } : m))
+            }}
+            folder={folder}
+            slotKey={`${itemIndex}_${slotIdx}`}
+            label={`Slide ${slotIdx + 1}`}
+          />
+          {mediaItems.length > 1 && (
+            <button
+              type="button"
+              onClick={() => onChange(mediaItems.filter((_, i) => i !== slotIdx))}
+              className="text-xs text-red-400 hover:text-red-600 transition-colors mt-1 pl-1"
+            >
+              Remover slide
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...mediaItems, EMPTY_MEDIA_ITEM()])}
+        className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors self-start pt-1"
+      >
+        + Adicionar slide
+      </button>
+    </div>
+  )
+}
 
 // ─── Seletor de redes ─────────────────────────────────────────────────────────
 function NetworkSelector({
@@ -40,97 +265,26 @@ function NetworkSelector({
             type="button"
             disabled={isAlone || (!isSel && !isComp)}
             onClick={() => onToggle(n)}
-            title={!isSel && !isComp ? 'Incompatível com as redes selecionadas' : isAlone ? 'Pelo menos uma rede é obrigatória' : undefined}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all
-              ${isSel ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                : isComp ? 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-                : 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
-              }`}
+            title={
+              !isSel && !isComp ? 'Incompatível com as redes selecionadas'
+              : isAlone ? 'Pelo menos uma rede é obrigatória'
+              : undefined
+            }
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+              isSel
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                : isComp
+                  ? 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                  : 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+            }`}
           >
             {NETWORK_LABELS[n]}
-            {isSel && selected.length > 1 && <span className="ml-1.5 text-indigo-400 font-bold text-[10px]">×</span>}
+            {isSel && selected.length > 1 && (
+              <span className="ml-1.5 text-indigo-400 font-bold text-[10px]">×</span>
+            )}
           </button>
         )
       })}
-    </div>
-  )
-}
-
-// ─── Campos de mídia ──────────────────────────────────────────────────────────
-function MediaFields({
-  kind,
-  type,
-  mediaItems,
-  onChange,
-}: {
-  kind: MediaKind
-  type: ContentType
-  mediaItems: MediaItem[]
-  onChange: (items: MediaItem[]) => void
-}) {
-  if (kind === 'none') return null
-
-  const fieldLabel = MEDIA_FIELD_LABELS[type]
-
-  if (kind === 'video' || kind === 'image') {
-    const item = mediaItems[0] ?? { url: '', label: '' }
-    return (
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">{fieldLabel}</label>
-        <input
-          type="url"
-          placeholder={kind === 'video' ? 'YouTube, Vimeo, Google Drive...' : 'Google Drive, Dropbox, URL direta...'}
-          value={item.url}
-          onChange={(e) => onChange([{ url: e.target.value, label: '' }])}
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-        />
-      </div>
-    )
-  }
-
-  // multi (carrossel / stories)
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-xs font-medium text-gray-500">{fieldLabel}</label>
-        <span className="text-xs text-gray-400">{mediaItems.length} slide{mediaItems.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div className="flex flex-col gap-2">
-        {mediaItems.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 font-medium w-14 shrink-0 text-right">Slide {idx + 1}</span>
-            <input
-              type="url"
-              placeholder="Google Drive, Dropbox, URL direta..."
-              value={item.url}
-              onChange={(e) => {
-                const updated = mediaItems.map((m, i) => i === idx ? { ...m, url: e.target.value } : m)
-                onChange(updated)
-              }}
-              className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-            />
-            {mediaItems.length > 1 && (
-              <button
-                type="button"
-                onClick={() => onChange(mediaItems.filter((_, i) => i !== idx))}
-                className="text-gray-300 hover:text-red-400 transition-colors p-1 shrink-0"
-                aria-label="Remover slide"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange([...mediaItems, EMPTY_MEDIA_ITEM()])}
-        className="mt-2 text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
-      >
-        + Adicionar slide
-      </button>
     </div>
   )
 }
@@ -139,11 +293,13 @@ function MediaFields({
 function ItemCard({
   index,
   item,
+  folder,
   onChange,
   onRemove,
 }: {
   index: number
   item: FinalReviewItemFormData
+  folder: string
   onChange: (data: FinalReviewItemFormData) => void
   onRemove: () => void
 }) {
@@ -161,21 +317,20 @@ function ItemCard({
     const newCompatible = getCompatibleFormats(newNetworks)
     const newType       = newCompatible.includes(item.type) ? item.type : newCompatible[0] ?? item.type
     const newKind       = getMediaKind(newType)
-
-    // Reset media items to fit new kind
-    const newMedia = newKind === 'none' ? [] : newKind === 'multi' ? [EMPTY_MEDIA_ITEM()] : [EMPTY_MEDIA_ITEM()]
+    const newMedia      = newKind === 'none' ? [] : [EMPTY_MEDIA_ITEM()]
 
     onChange({ ...item, social_networks: newNetworks, type: newType, media_items: newMedia })
   }
 
   const handleTypeChange = (type: ContentType) => {
     const newKind  = getMediaKind(type)
-    const newMedia = newKind === 'none' ? [] : newKind === 'multi' ? [EMPTY_MEDIA_ITEM()] : [EMPTY_MEDIA_ITEM()]
+    const newMedia = newKind === 'none' ? [] : [EMPTY_MEDIA_ITEM()]
     onChange({ ...item, type, media_items: newMedia })
   }
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      {/* Header do card */}
       <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50">
         <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">
           Conteúdo {index + 1}
@@ -202,7 +357,7 @@ function ItemCard({
           />
         </div>
 
-        {/* Redes */}
+        {/* Redes sociais */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-gray-500">Rede social</label>
@@ -240,13 +395,26 @@ function ItemCard({
           )}
         </div>
 
-        {/* Campos de mídia (condicional por formato) */}
-        <MediaFields
-          kind={kind}
-          type={item.type}
-          mediaItems={item.media_items}
-          onChange={(items) => onChange({ ...item, media_items: items })}
-        />
+        {/* Upload de mídia */}
+        {kind !== 'none' && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-2">
+              {kind === 'video'
+                ? 'Vídeo final'
+                : kind === 'image'
+                  ? 'Imagem final'
+                  : 'Slides'
+              }
+            </label>
+            <MediaUploadFields
+              kind={kind}
+              mediaItems={item.media_items}
+              onChange={(items) => onChange({ ...item, media_items: items })}
+              folder={folder}
+              itemIndex={index}
+            />
+          </div>
+        )}
 
         {/* Legenda final */}
         <div>
@@ -288,20 +456,6 @@ function ItemCard({
           </div>
         </div>
 
-        {/* Link de referência */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">
-            Link de referência <span className="font-normal text-gray-300">(opcional)</span>
-          </label>
-          <input
-            type="url"
-            placeholder="https://..."
-            value={item.reference_url}
-            onChange={(e) => onChange({ ...item, reference_url: e.target.value })}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-          />
-        </div>
-
         {/* Observações */}
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -320,8 +474,15 @@ function ItemCard({
   )
 }
 
-// ─── Página ───────────────────────────────────────────────────────────────────
+// ─── Página principal ─────────────────────────────────────────────────────────
 export default function FinalCriarPage() {
+  // Gerado uma vez por sessão de criação — identifica a pasta no Storage
+  const [uploadSession] = useState<string>(() =>
+    typeof crypto !== 'undefined'
+      ? crypto.randomUUID().replace(/-/g, '')
+      : Math.random().toString(36).slice(2).padEnd(32, '0')
+  )
+
   const [clientName,   setClientName]   = useState('')
   const [monthRef,     setMonthRef]     = useState('')
   const [items,        setItems]        = useState<FinalReviewItemFormData[]>([EMPTY_ITEM()])
@@ -344,13 +505,14 @@ export default function FinalCriarPage() {
     if (!monthRef.trim())   return setError('Informe o mês de referência.')
 
     for (let i = 0; i < items.length; i++) {
-      const it = items[i]
-      if (!it.title.trim()) return setError(`Preencha o título do conteúdo ${i + 1}.`)
-      if (it.social_networks.length === 0) return setError(`Selecione ao menos uma rede para o conteúdo ${i + 1}.`)
+      const it   = items[i]
       const kind = getMediaKind(it.type)
-      if (kind !== 'none' && !it.media_items.some((m) => m.url.trim())) {
-        return setError(`Adicione ao menos um link de mídia para o conteúdo ${i + 1}.`)
-      }
+      if (!it.title.trim())
+        return setError(`Preencha o título do conteúdo ${i + 1}.`)
+      if (it.social_networks.length === 0)
+        return setError(`Selecione ao menos uma rede para o conteúdo ${i + 1}.`)
+      if (kind !== 'none' && !it.media_items.some((m) => m.url.trim()))
+        return setError(`Envie ao menos um arquivo de mídia para o conteúdo ${i + 1}.`)
     }
 
     setIsSubmitting(true)
@@ -361,6 +523,7 @@ export default function FinalCriarPage() {
         body:    JSON.stringify({
           client_name:     clientName.trim(),
           month_reference: monthRef.trim(),
+          storage_folder:  uploadSession,
           items,
         }),
       })
@@ -394,7 +557,7 @@ export default function FinalCriarPage() {
           <div>
             <h2 className="text-xl font-bold text-gray-900">Link gerado!</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Copie o link abaixo e envie para o seu cliente pelo WhatsApp.
+              Copie o link abaixo e envie para o cliente pelo WhatsApp.
             </p>
           </div>
           <div className="w-full flex flex-col gap-2">
@@ -466,6 +629,7 @@ export default function FinalCriarPage() {
             key={index}
             index={index}
             item={item}
+            folder={uploadSession}
             onChange={(data) => updateItem(index, data)}
             onRemove={() => removeItem(index)}
           />
@@ -489,7 +653,7 @@ export default function FinalCriarPage() {
           disabled={isSubmitting}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl text-sm transition-colors"
         >
-          {isSubmitting ? 'Gerando link...' : 'Gerar link de aprovação final'}
+          {isSubmitting ? 'Criando aprovação...' : 'Gerar link de aprovação final'}
         </button>
 
         <div className="h-6" />

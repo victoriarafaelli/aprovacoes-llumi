@@ -20,9 +20,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const supabase = createServerClient()
   const body = await request.json()
-  const { client_name, month_reference, items } = body as {
+  const { client_name, month_reference, storage_folder, items } = body as {
     client_name: string
     month_reference: string
+    storage_folder: string        // pasta no Supabase Storage (upload session id)
     items: FinalReviewItemFormData[]
   }
 
@@ -33,11 +34,22 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Valida storage_folder (32 hex chars — UUID sem traços)
+  if (storage_folder && !/^[a-f0-9]{32}$/i.test(storage_folder)) {
+    return NextResponse.json({ error: 'storage_folder inválido.' }, { status: 400 })
+  }
+
   const share_token = uuidv4().replace(/-/g, '').slice(0, 20)
 
   const { data: review, error: reviewError } = await supabase
     .from('final_reviews')
-    .insert({ client_name, month_reference, share_token, status: 'sent' })
+    .insert({
+      client_name,
+      month_reference,
+      share_token,
+      storage_folder: storage_folder || null,
+      status: 'sent',
+    })
     .select()
     .single()
 
@@ -48,11 +60,11 @@ export async function POST(request: NextRequest) {
     title:           item.title,
     social_networks: item.social_networks,
     type:            item.type,
-    caption:         item.caption     || null,
+    caption:         item.caption      || null,
     observations:    item.observations || null,
     publish_date:    item.publish_date || null,
     publish_time:    item.publish_time || null,
-    reference_url:   item.reference_url || null,
+    // Filtra slots sem URL (usuário não fez upload naquele slide)
     media_items:     item.media_items.filter((m) => m.url.trim()),
     approval_status: 'pending' as const,
     client_feedback: null,
@@ -64,6 +76,7 @@ export async function POST(request: NextRequest) {
     .insert(itemsToInsert)
 
   if (itemsError) {
+    // Rollback: remove a review se falhou ao inserir itens
     await supabase.from('final_reviews').delete().eq('id', review.id)
     return NextResponse.json({ error: itemsError.message }, { status: 500 })
   }

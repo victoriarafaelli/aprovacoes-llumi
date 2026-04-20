@@ -28,16 +28,16 @@ export type { SocialNetwork, ContentType }
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 export type ReviewStatus   = 'draft' | 'sent' | 'completed'
 
-/** Um item de mídia: imagem, vídeo ou slide de carrossel */
+/** Um item de mídia armazenado no Supabase Storage */
 export interface MediaItem {
-  url:   string
-  label: string // ex: "Slide 1", "" para itens únicos
+  url:   string  // URL pública do Supabase Storage
+  label: string  // ex: "Slide 1", "" para itens únicos
 }
 
-/** Formatos que aceitam múltiplos itens de mídia */
+/** Formatos que aceitam múltiplos itens de mídia (carrossel de imagens) */
 export const MULTI_MEDIA_FORMATS: ContentType[] = ['carrossel', 'stories']
 
-/** Formatos de vídeo (link de vídeo) */
+/** Formatos de vídeo */
 export const VIDEO_MEDIA_FORMATS: ContentType[] = ['reels', 'video', 'shorts']
 
 /** Formatos de imagem única */
@@ -55,6 +55,22 @@ export function getMediaKind(type: ContentType): MediaKind {
   return 'none'
 }
 
+/** Tipo de input de arquivo aceito por formato */
+export const MEDIA_ACCEPT: Record<MediaKind, 'image/*' | 'video/*' | ''> = {
+  video: 'video/*',
+  image: 'image/*',
+  multi: 'image/*',
+  none:  '',
+}
+
+/** Dica de formato exibida no input */
+export const MEDIA_ACCEPT_HINT: Record<MediaKind, string> = {
+  video: 'MP4, WebM, MOV',
+  image: 'JPG, PNG, WebP, GIF',
+  multi: 'JPG, PNG, WebP, GIF',
+  none:  '',
+}
+
 // ─── Entidades do banco ───────────────────────────────────────────────────────
 
 export interface FinalReview {
@@ -62,6 +78,7 @@ export interface FinalReview {
   client_name: string
   month_reference: string
   share_token: string
+  storage_folder: string | null  // pasta no Supabase Storage para limpeza
   status: ReviewStatus
   created_at: string
   items?: FinalReviewItem[]
@@ -73,12 +90,11 @@ export interface FinalReviewItem {
   title: string
   social_networks: SocialNetwork[]
   type: ContentType
-  caption: string | null        // legenda final
+  caption: string | null         // legenda final
   observations: string | null
   publish_date: string | null
   publish_time: string | null
-  reference_url: string | null
-  media_items: MediaItem[]      // JSONB array no banco
+  media_items: MediaItem[]       // JSONB array no banco
   approval_status: ApprovalStatus
   client_feedback: string | null // comentário do cliente
   order_position: number
@@ -95,7 +111,6 @@ export interface FinalReviewItemFormData {
   observations: string
   publish_date: string
   publish_time: string
-  reference_url: string
   media_items: MediaItem[]
 }
 
@@ -109,7 +124,6 @@ export const EMPTY_ITEM = (): FinalReviewItemFormData => ({
   observations:    '',
   publish_date:    '',
   publish_time:    '',
-  reference_url:   '',
   media_items:     [EMPTY_MEDIA_ITEM()],
 })
 
@@ -157,25 +171,7 @@ export function isDirectImageUrl(url: string): boolean {
 }
 
 export function isDirectVideoUrl(url: string): boolean {
-  return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)
-}
-
-export function getMediaLabel(kind: MediaKind): { field: string; hint: string } {
-  if (kind === 'video')  return { field: 'Link do vídeo', hint: 'YouTube, Vimeo, Drive, Dropbox...' }
-  if (kind === 'image')  return { field: 'Link da imagem', hint: 'Drive, Dropbox, URL direta...' }
-  if (kind === 'multi')  return { field: 'Link do slide', hint: 'Drive, Dropbox, URL direta...' }
-  return { field: '', hint: '' }
-}
-
-// Labels para tipos de media no campo
-export const MEDIA_FIELD_LABELS: Record<ContentType, string> = {
-  post:      'Link da imagem',
-  carrossel: 'Link dos slides',
-  reels:     'Link do vídeo',
-  stories:   'Link das peças',
-  video:     'Link do vídeo',
-  shorts:    'Link do vídeo',
-  artigo:    '',
+  return /\.(mp4|webm|ogg|mov|avi)(\?.*)?$/i.test(url)
 }
 
 export const NETWORKS_ORDER: SocialNetwork[] = [

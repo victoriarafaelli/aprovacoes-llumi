@@ -20,10 +20,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const supabase = createServerClient()
   const body = await request.json()
-  const { client_name, month_reference, storage_folder, items } = body as {
+  const { client_name, month_reference, storage_folder, feed_preview_url, items } = body as {
     client_name: string
     month_reference: string
     storage_folder: string        // pasta no Supabase Storage (upload session id)
+    feed_preview_url?: string | null
     items: FinalReviewItemFormData[]
   }
 
@@ -48,6 +49,9 @@ export async function POST(request: NextRequest) {
       month_reference,
       share_token,
       storage_folder: storage_folder || null,
+      feed_preview_url:      feed_preview_url || null,
+      feed_preview_status:   'pending',
+      feed_preview_feedback: null,
       status: 'sent',
     })
     .select()

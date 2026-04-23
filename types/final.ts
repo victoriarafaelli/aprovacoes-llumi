@@ -78,9 +78,13 @@ export interface FinalReview {
   client_name: string
   month_reference: string
   share_token: string
-  storage_folder: string | null  // pasta no Supabase Storage para limpeza
+  storage_folder: string | null      // pasta no Supabase Storage para limpeza
   status: ReviewStatus
   created_at: string
+  // ── Prévia do feed (opcional) ───────────────────────────────────────────────
+  feed_preview_url: string | null    // URL pública da imagem no Storage
+  feed_preview_status: ApprovalStatus
+  feed_preview_feedback: string | null
   items?: FinalReviewItem[]
 }
 

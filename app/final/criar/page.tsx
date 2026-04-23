@@ -90,12 +90,14 @@ function FileUploadSlot({
 }) {
   const [progress,     setProgress]     = useState<number | null>(null) // 0-100 ou null
   const [uploadError,  setUploadError]  = useState<string | null>(null)
+  const [currentFile,  setCurrentFile]  = useState<{ name: string; size: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const xhrRef   = useRef<XMLHttpRequest | null>(null)
 
   const handleFile = async (file: File) => {
     setProgress(0)
     setUploadError(null)
+    setCurrentFile({ name: file.name, size: file.size })
 
     // Resolve o tipo MIME (corrige file.type vazio em Windows/Firefox com .mov)
     const contentType = resolveContentType(file)
@@ -158,7 +160,19 @@ function FileUploadSlot({
             storageError = parsed.error ?? parsed.message ?? parsed.statusCode ?? ''
           } catch { /* responseText não é JSON */ }
 
-          if (storageError) {
+          const isPayloadTooLarge =
+            xhr.status === 413 ||
+            storageError.toLowerCase().includes('payload too large') ||
+            storageError.toLowerCase().includes('entity too large') ||
+            storageError.toLowerCase().includes('file size')
+
+          if (isPayloadTooLarge) {
+            const mb = (file.size / 1024 / 1024).toFixed(1)
+            setUploadError(
+              `Arquivo muito grande (${mb} MB). O limite do bucket no Supabase precisa ser aumentado. ` +
+              `Execute o SQL indicado na documentação ou converta o vídeo para MP4 (muito menor que MOV).`
+            )
+          } else if (storageError) {
             setUploadError(`Upload falhou: ${storageError}`)
           } else if (xhr.status === 400) {
             setUploadError(`Upload rejeitado (400). Formato "${file.name.split('.').pop()?.toUpperCase()}" pode não ser suportado. Tente converter para MP4.`)
@@ -202,6 +216,12 @@ function FileUploadSlot({
   const uploading = progress !== null
   const isImage   = value && isDirectImageUrl(value)
 
+  // Formata bytes em KB / MB legível
+  const fmtSize = (bytes: number) =>
+    bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(0)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+
   return (
     <div className="flex flex-col gap-1">
       {/* Input oculto */}
@@ -214,14 +234,15 @@ function FileUploadSlot({
       />
 
       {uploading ? (
-        /* Estado: enviando — barra de progresso real */
+        /* Estado: enviando — barra de progresso com nome e tamanho do arquivo */
         <div className="border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-4 flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-indigo-600 font-medium">
-              {label ? `${label} — ` : ''}Enviando...
+            <span className="text-sm text-indigo-600 font-medium truncate max-w-[70%]">
+              {label ? `${label} — ` : ''}
+              {currentFile ? currentFile.name : 'Enviando...'}
             </span>
-            <span className="text-xs text-indigo-400 font-semibold tabular-nums">
-              {progress}%
+            <span className="text-xs text-indigo-400 font-semibold tabular-nums shrink-0">
+              {currentFile ? fmtSize(currentFile.size) : ''} · {progress}%
             </span>
           </div>
           <div className="h-1.5 bg-indigo-100 rounded-full overflow-hidden">
@@ -627,13 +648,14 @@ export default function FinalCriarPage() {
       : Math.random().toString(36).slice(2).padEnd(32, '0')
   )
 
-  const [clientName,   setClientName]   = useState('')
-  const [monthRef,     setMonthRef]     = useState('')
-  const [items,        setItems]        = useState<FinalReviewItemFormData[]>([EMPTY_ITEM()])
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [shareLink,    setShareLink]    = useState<string | null>(null)
-  const [copied,       setCopied]       = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
+  const [clientName,      setClientName]      = useState('')
+  const [monthRef,        setMonthRef]        = useState('')
+  const [feedPreviewUrl,  setFeedPreviewUrl]  = useState<string>('')
+  const [items,           setItems]           = useState<FinalReviewItemFormData[]>([EMPTY_ITEM()])
+  const [isSubmitting,    setIsSubmitting]    = useState(false)
+  const [shareLink,       setShareLink]       = useState<string | null>(null)
+  const [copied,          setCopied]          = useState(false)
+  const [error,           setError]           = useState<string | null>(null)
 
   const addItem    = () => setItems((prev) => [...prev, EMPTY_ITEM()])
   const updateItem = (i: number, data: FinalReviewItemFormData) =>
@@ -665,9 +687,10 @@ export default function FinalCriarPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          client_name:     clientName.trim(),
-          month_reference: monthRef.trim(),
-          storage_folder:  uploadSession,
+          client_name:      clientName.trim(),
+          month_reference:  monthRef.trim(),
+          storage_folder:   uploadSession,
+          feed_preview_url: feedPreviewUrl || null,
           items,
         }),
       })
@@ -785,6 +808,32 @@ export default function FinalCriarPage() {
         >
           + Adicionar conteúdo
         </button>
+
+        {/* ── Prévia do Feed ────────────────────────────────────────────────── */}
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b border-gray-50">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Prévia do Feed
+              </span>
+              <span className="text-xs text-gray-300 font-normal">(opcional)</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Mostre ao cliente como a grade do perfil vai ficar após as publicações.
+              Será exibida como um item separado de aprovação no link do cliente.
+            </p>
+          </div>
+          <div className="px-5 py-4">
+            <FileUploadSlot
+              accept="image/*"
+              acceptHint="JPG, PNG, WebP · Recomendado 1080×1080"
+              value={feedPreviewUrl}
+              onChange={setFeedPreviewUrl}
+              folder={uploadSession}
+              slotKey="feed_preview"
+            />
+          </div>
+        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">

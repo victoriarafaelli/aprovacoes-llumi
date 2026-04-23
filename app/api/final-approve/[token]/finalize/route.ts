@@ -11,7 +11,7 @@ export async function POST(
 
   const { data: review, error: reviewError } = await supabase
     .from('final_reviews')
-    .select('id, status, items:final_review_items(approval_status)')
+    .select('id, status, feed_preview_url, feed_preview_status, items:final_review_items(approval_status)')
     .eq('share_token', token)
     .single()
 
@@ -24,9 +24,13 @@ export async function POST(
   }
 
   const items = review.items as Array<{ approval_status: string }>
-  const hasPending = items.some((i) => i.approval_status === 'pending')
+  const hasPendingItems = items.some((i) => i.approval_status === 'pending')
 
-  if (hasPending) {
+  // Bloqueia se a prévia do feed existe e ainda está pendente
+  const hasPendingFeedPreview =
+    !!review.feed_preview_url && review.feed_preview_status === 'pending'
+
+  if (hasPendingItems || hasPendingFeedPreview) {
     return NextResponse.json(
       { error: 'Ainda há itens pendentes de revisão' },
       { status: 400 }

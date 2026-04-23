@@ -218,6 +218,53 @@ function ItemCard({ item }: { item: FinalReviewItem }) {
   )
 }
 
+// ─── Card de prévia do feed (read-only, visão do gerente) ────────────────────
+function FeedPreviewManagerCard({ review }: { review: FinalReview }) {
+  if (!review.feed_preview_url) return null
+
+  const statusMap = {
+    pending:  { label: 'Pendente',  cls: 'bg-gray-100 text-gray-500' },
+    approved: { label: 'Aprovado',  cls: 'bg-green-100 text-green-700' },
+    rejected: { label: 'Reprovado', cls: 'bg-red-100 text-red-600' },
+  }
+  const { label, cls } = statusMap[review.feed_preview_status ?? 'pending']
+
+  const borderMap = {
+    pending:  'border-gray-100',
+    approved: 'border-green-200',
+    rejected: 'border-red-200',
+  }
+  const border = borderMap[review.feed_preview_status ?? 'pending']
+
+  return (
+    <div className={`bg-white border-2 rounded-2xl shadow-sm overflow-hidden ${border}`}>
+      <div className="px-5 pt-4 pb-3 border-b border-gray-50 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Prévia do Feed</p>
+          <p className="text-xs text-gray-400 mt-0.5">Como o perfil vai ficar após as publicações</p>
+        </div>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>
+      </div>
+      <div className="px-5 py-4 flex flex-col gap-4">
+        <div className="w-full rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={review.feed_preview_url}
+            alt="Prévia do feed"
+            className="w-full object-contain max-h-[480px]"
+          />
+        </div>
+        {review.feed_preview_feedback && (
+          <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-amber-700 mb-1">Feedback do cliente</p>
+            <p className="text-sm text-amber-800 whitespace-pre-wrap">{review.feed_preview_feedback}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 export default function FinalDetailPage() {
   const { id }     = useParams<{ id: string }>()
@@ -398,6 +445,17 @@ export default function FinalDetailPage() {
 
       {/* Itens */}
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4">
+        {/* Prévia do feed — sempre visível no topo, fora do filtro */}
+        {filter === 'all' && <FeedPreviewManagerCard review={review} />}
+
+        {review.feed_preview_url && filter === 'all' && review.items.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-gray-300 font-medium whitespace-nowrap">Conteúdos individuais</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+        )}
+
         {filteredItems.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-gray-400 text-sm">Nenhum conteúdo nesta categoria.</p>

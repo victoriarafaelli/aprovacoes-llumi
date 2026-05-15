@@ -81,14 +81,20 @@ function NetworkSelector({
 // ─── Card de conteúdo ─────────────────────────────────────────────────────────
 function ContentCard({
   index,
+  total,
   content,
   onChange,
   onRemove,
+  onMoveUp,
+  onMoveDown,
 }: {
   index: number
+  total: number
   content: ContentFormData
   onChange: (data: ContentFormData) => void
   onRemove: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
 }) {
   const compatibleFormats = getCompatibleFormats(content.social_networks)
   const isVideo           = isVideoFormat(content.type)
@@ -140,13 +146,31 @@ function ContentCard({
         <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">
           Conteúdo {index + 1}
         </span>
-        <button
-          onClick={onRemove}
-          className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center"
-          aria-label="Remover"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onMoveUp}
+            disabled={index === 0}
+            title="Mover para cima"
+            className="text-gray-300 hover:text-indigo-400 disabled:opacity-20 transition-colors w-6 h-6 flex items-center justify-center"
+          >
+            ↑
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            title="Mover para baixo"
+            className="text-gray-300 hover:text-indigo-400 disabled:opacity-20 transition-colors w-6 h-6 flex items-center justify-center"
+          >
+            ↓
+          </button>
+          <button
+            onClick={onRemove}
+            className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center ml-1"
+            aria-label="Remover"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-4">
@@ -350,6 +374,14 @@ export default function CriarPage() {
     if (contents.length === 1) return
     setContents((prev) => prev.filter((_, i) => i !== index))
   }
+  const moveContent = (from: number, to: number) => {
+    setContents((prev) => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
 
   const handleSubmit = async () => {
     setError(null)
@@ -481,9 +513,12 @@ export default function CriarPage() {
           <ContentCard
             key={index}
             index={index}
+            total={contents.length}
             content={content}
             onChange={(data) => updateContent(index, data)}
             onRemove={() => removeContent(index)}
+            onMoveUp={() => moveContent(index, index - 1)}
+            onMoveDown={() => moveContent(index, index + 1)}
           />
         ))}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import {
   Content,
@@ -45,15 +45,20 @@ function TypeBadge({ type }: { type: Content['type'] }) {
 function ApprovalCard({
   content,
   isReadOnly,
+  token,
   onStatusChange,
 }: {
   content: Content
   isReadOnly: boolean
+  token: string
   onStatusChange: (id: string, status: ApprovalStatus) => void
 }) {
   const [scriptExpanded, setScriptExpanded] = useState(false)
   const [obsExpanded, setObsExpanded]       = useState(false)
   const [loading, setLoading]               = useState(false)
+  const [feedbackText, setFeedbackText]     = useState(content.client_feedback ?? '')
+  const [feedbackSaved, setFeedbackSaved]   = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isVideo = isVideoFormat(content.type)
 
@@ -66,6 +71,23 @@ function ApprovalCard({
     pending:  'bg-white',
     approved: 'bg-green-50',
     rejected: 'bg-red-50',
+  }
+
+  const handleFeedbackChange = (text: string) => {
+    setFeedbackText(text)
+    setFeedbackSaved(false)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/approve/${token}/content/${content.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ client_feedback: text }),
+        })
+        setFeedbackSaved(true)
+        setTimeout(() => setFeedbackSaved(false), 2000)
+      } catch { /* silencioso */ }
+    }, 800)
   }
 
   const handleClick = async (newStatus: ApprovalStatus) => {
@@ -181,6 +203,36 @@ function ApprovalCard({
           </div>
         )}
       </div>
+
+      {/* Comentário do cliente */}
+      {!isReadOnly && (
+        <div className="px-5 pb-4">
+          <div className="relative">
+            <textarea
+              placeholder="Deixe um comentário ou observação (opcional)..."
+              value={feedbackText}
+              onChange={(e) => handleFeedbackChange(e.target.value)}
+              rows={2}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent resize-none"
+            />
+            {feedbackSaved && (
+              <span className="absolute bottom-2 right-3 text-xs text-green-500 font-medium">
+                Salvo ✓
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Comentário salvo — modo read-only */}
+      {isReadOnly && feedbackText && (
+        <div className="px-5 pb-4">
+          <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            <p className="text-xs font-medium text-amber-600 mb-1">Seu comentário</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedbackText}</p>
+          </div>
+        </div>
+      )}
 
       {/* Botões de aprovação */}
       {!isReadOnly && (
@@ -397,6 +449,7 @@ export default function AprovarPage() {
               key={content.id}
               content={content}
               isReadOnly={true}
+              token={token}
               onStatusChange={() => {}}
             />
           ))}
@@ -446,6 +499,7 @@ export default function AprovarPage() {
             key={content.id}
             content={content}
             isReadOnly={isReadOnly}
+            token={token}
             onStatusChange={handleStatusChange}
           />
         ))}

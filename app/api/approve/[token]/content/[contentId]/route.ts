@@ -12,9 +12,15 @@ export async function PATCH(
   const supabase = createServerClient()
 
   const body = await request.json()
-  const { approval_status } = body as { approval_status: ApprovalStatus }
+  const { approval_status, client_feedback } = body as {
+    approval_status?: ApprovalStatus
+    client_feedback?: string
+  }
 
-  if (!['approved', 'rejected', 'pending'].includes(approval_status)) {
+  if (
+    approval_status !== undefined &&
+    !['approved', 'rejected', 'pending'].includes(approval_status)
+  ) {
     return NextResponse.json({ error: 'Status inválido' }, { status: 400 })
   }
 
@@ -36,10 +42,19 @@ export async function PATCH(
     )
   }
 
-  // Atualiza o status do conteúdo
+  // Monta objeto de atualização (status e/ou feedback)
+  const updateData: Record<string, unknown> = {}
+  if (approval_status !== undefined) updateData.approval_status = approval_status
+  if (client_feedback !== undefined) updateData.client_feedback = client_feedback || null
+
+  if (Object.keys(updateData).length === 0) {
+    return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })
+  }
+
+  // Atualiza o status e/ou feedback do conteúdo
   const { data, error } = await supabase
     .from('contents')
-    .update({ approval_status })
+    .update(updateData)
     .eq('id', contentId)
     .eq('plan_id', plan.id)
     .select()

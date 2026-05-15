@@ -35,7 +35,7 @@ export interface MediaItem {
 }
 
 /** Formatos que aceitam múltiplos itens de mídia (carrossel de imagens) */
-export const MULTI_MEDIA_FORMATS: ContentType[] = ['carrossel', 'stories']
+export const MULTI_MEDIA_FORMATS: ContentType[] = ['carrossel']
 
 /** Formatos de vídeo */
 export const VIDEO_MEDIA_FORMATS: ContentType[] = ['reels', 'video', 'shorts']
@@ -43,32 +43,38 @@ export const VIDEO_MEDIA_FORMATS: ContentType[] = ['reels', 'video', 'shorts']
 /** Formatos de imagem única */
 export const IMAGE_MEDIA_FORMATS: ContentType[] = ['post']
 
+/** Stories: aceita imagens (múltiplas) OU um vídeo (≤ 59 s) */
+export const STORIES_FORMAT: ContentType[] = ['stories']
+
 /** Formatos sem mídia */
 export const NO_MEDIA_FORMATS: ContentType[] = ['artigo']
 
-export type MediaKind = 'video' | 'image' | 'multi' | 'none'
+export type MediaKind = 'video' | 'image' | 'multi' | 'stories' | 'none'
 
 export function getMediaKind(type: ContentType): MediaKind {
   if (VIDEO_MEDIA_FORMATS.includes(type)) return 'video'
   if (IMAGE_MEDIA_FORMATS.includes(type))  return 'image'
   if (MULTI_MEDIA_FORMATS.includes(type))  return 'multi'
+  if (STORIES_FORMAT.includes(type))       return 'stories'
   return 'none'
 }
 
 /** Tipo de input de arquivo aceito por formato */
-export const MEDIA_ACCEPT: Record<MediaKind, 'image/*' | 'video/*' | ''> = {
-  video: 'video/*',
-  image: 'image/*',
-  multi: 'image/*',
-  none:  '',
+export const MEDIA_ACCEPT: Record<MediaKind, string> = {
+  video:   'video/*',
+  image:   'image/*',
+  multi:   'image/*',
+  stories: 'image/*,video/*',
+  none:    '',
 }
 
 /** Dica de formato exibida no input de upload */
 export const MEDIA_ACCEPT_HINT: Record<MediaKind, string> = {
-  video: 'MP4 ou WebM recomendados · MOV aceito',
-  image: 'JPG, PNG, WebP, GIF',
-  multi: 'JPG, PNG, WebP, GIF',
-  none:  '',
+  video:   'MP4 ou WebM recomendados · MOV aceito',
+  image:   'JPG, PNG, WebP, GIF',
+  multi:   'JPG, PNG, WebP, GIF',
+  stories: 'JPG, PNG, WebP, GIF · ou MP4/MOV (máx. 59 s)',
+  none:    '',
 }
 
 // ─── Entidades do banco ───────────────────────────────────────────────────────

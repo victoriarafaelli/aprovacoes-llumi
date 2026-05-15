@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import AppTabs from '@/components/AppTabs'
@@ -145,11 +145,164 @@ function CarouselViewer({ urls }: { urls: string[] }) {
   )
 }
 
+// ─── Modal de edição de item ──────────────────────────────────────────────────
+function EditItemModal({
+  item,
+  reviewId,
+  onSave,
+  onClose,
+}: {
+  item: FinalReviewItem
+  reviewId: string
+  onSave: (updated: FinalReviewItem) => void
+  onClose: () => void
+}) {
+  const [title,        setTitle]        = useState(item.title)
+  const [caption,      setCaption]      = useState(item.caption ?? '')
+  const [observations, setObservations] = useState(item.observations ?? '')
+  const [publishDate,  setPublishDate]  = useState(item.publish_date ?? '')
+  const [publishTime,  setPublishTime]  = useState(item.publish_time ?? '')
+  const [saving,    setSaving]          = useState(false)
+  const [saveError, setSaveError]       = useState<string | null>(null)
+
+  const handleSave = async () => {
+    if (!title.trim()) { setSaveError('O título é obrigatório.'); return }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/final-reviews/${reviewId}/items/${item.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          title:        title.trim(),
+          caption:      caption      || null,
+          observations: observations || null,
+          publish_date: publishDate  || null,
+          publish_time: publishTime  || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setSaveError(data.error || 'Erro ao salvar.'); setSaving(false); return }
+      onSave({ ...item, ...data })
+    } catch {
+      setSaveError('Erro de conexão. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+          <h3 className="font-semibold text-gray-900">Editar conteúdo</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">×</button>
+        </div>
+
+        <div className="px-5 py-4 flex flex-col gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Título</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Legenda <span className="font-normal text-gray-300">(opcional)</span>
+            </label>
+            <textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              rows={3}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Data de publicação <span className="font-normal text-gray-300">(opcional)</span>
+              </label>
+              <input
+                type="date"
+                value={publishDate}
+                onChange={(e) => setPublishDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
+            <div className="w-36">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Horário <span className="font-normal text-gray-300">(opcional)</span>
+              </label>
+              <input
+                type="time"
+                value={publishTime}
+                onChange={(e) => setPublishTime(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Observações <span className="font-normal text-gray-300">(opcional)</span>
+            </label>
+            <textarea
+              value={observations}
+              onChange={(e) => setObservations(e.target.value)}
+              rows={2}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
+            />
+          </div>
+
+          {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2 sticky bottom-0 bg-white rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white transition-colors"
+          >
+            {saving ? 'Salvando...' : 'Salvar alterações'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Card de item ─────────────────────────────────────────────────────────────
-function ItemCard({ item }: { item: FinalReviewItem }) {
+function ItemCard({
+  item,
+  index,
+  total,
+  reordering,
+  onMoveUp,
+  onMoveDown,
+  onEdit,
+}: {
+  item: FinalReviewItem
+  index: number
+  total: number
+  reordering: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onEdit: () => void
+}) {
   const kind       = getMediaKind(item.type)
   const mediaUrls  = item.media_items.map((m) => m.url).filter(Boolean)
-  const isMulti    = kind === 'multi'
+  const isMulti    = kind === 'multi' || kind === 'stories'
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
@@ -174,7 +327,30 @@ function ItemCard({ item }: { item: FinalReviewItem }) {
               )}
             </div>
           </div>
-          <ApprovalBadge status={item.approval_status} />
+          <div className="flex items-center gap-1 shrink-0">
+            {reordering ? (
+              <>
+                <button
+                  onClick={onMoveUp}
+                  disabled={index === 0}
+                  className="text-gray-300 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50"
+                >↑</button>
+                <button
+                  onClick={onMoveDown}
+                  disabled={index === total - 1}
+                  className="text-gray-300 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50"
+                >↓</button>
+              </>
+            ) : (
+              <button
+                onClick={onEdit}
+                className="text-xs font-medium text-indigo-500 hover:text-indigo-700 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                Editar
+              </button>
+            )}
+            <ApprovalBadge status={item.approval_status} />
+          </div>
         </div>
       </div>
 
@@ -274,6 +450,8 @@ export default function FinalDetailPage() {
   const [copied, setCopied]   = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [reordering, setReordering] = useState(false)
+  const [editing, setEditing]       = useState<FinalReviewItem | null>(null)
 
   useEffect(() => {
     fetch(`/api/final-reviews/${id}`)
@@ -351,6 +529,27 @@ export default function FinalDetailPage() {
     }
   }
 
+  const updateItem = useCallback((updated: FinalReviewItem) => {
+    setReview((prev) => {
+      if (!prev) return prev
+      return { ...prev, items: prev.items.map((it) => it.id === updated.id ? updated : it) }
+    })
+  }, [])
+
+  const moveItem = useCallback(async (items: FinalReviewItem[], from: number, to: number) => {
+    const next = [...items]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    setReview((prev) => prev ? { ...prev, items: next } : prev)
+    try {
+      await fetch(`/api/final-reviews/${id}/reorder`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ order: next.map((it) => it.id) }),
+      })
+    } catch { /* silencioso */ }
+  }, [id])
+
   const tabs: { key: FilterTab; label: string; count: number }[] = [
     { key: 'all',      label: 'Todos',      count: stats.total },
     { key: 'pending',  label: 'Pendentes',  count: stats.pending },
@@ -418,27 +617,41 @@ export default function FinalDetailPage() {
           )}
         </div>
 
-        {/* Abas de filtro */}
+        {/* Abas de filtro + botão reordenar */}
         {stats.total > 0 && (
-          <div className="max-w-2xl mx-auto px-4 flex gap-0 border-t border-gray-50">
-            {tabs.map((tab) => (
+          <div className="max-w-2xl mx-auto px-4 flex items-center gap-0 border-t border-gray-50">
+            <div className="flex flex-1 overflow-x-auto">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => { setFilter(tab.key); setReordering(false) }}
+                  className={`px-4 py-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                    filter === tab.key
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className="ml-1.5 bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px]">
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {filter === 'all' && (
               <button
-                key={tab.key}
-                onClick={() => setFilter(tab.key)}
-                className={`px-4 py-3 text-xs font-semibold border-b-2 transition-colors ${
-                  filter === tab.key
-                    ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                onClick={() => setReordering((v) => !v)}
+                className={`ml-2 px-3 py-1.5 rounded-xl text-xs font-semibold border shrink-0 transition-all ${
+                  reordering
+                    ? 'bg-indigo-600 text-white border-transparent'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-500'
                 }`}
               >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className="ml-1.5 bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px]">
-                    {tab.count}
-                  </span>
-                )}
+                {reordering ? 'Concluir' : 'Reordenar'}
               </button>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -461,11 +674,36 @@ export default function FinalDetailPage() {
             <p className="text-gray-400 text-sm">Nenhum conteúdo nesta categoria.</p>
           </div>
         ) : (
-          filteredItems.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))
+          filteredItems.map((item) => {
+            const originalIndex = review.items.indexOf(item)
+            return (
+              <ItemCard
+                key={item.id}
+                item={item}
+                index={originalIndex}
+                total={review.items.length}
+                reordering={reordering}
+                onMoveUp={() => moveItem(review.items, originalIndex, originalIndex - 1)}
+                onMoveDown={() => moveItem(review.items, originalIndex, originalIndex + 1)}
+                onEdit={() => setEditing(item)}
+              />
+            )
+          })
         )}
       </div>
+
+      {/* Modal de edição */}
+      {editing && (
+        <EditItemModal
+          item={editing}
+          reviewId={id}
+          onSave={(updated) => {
+            updateItem(updated)
+            setEditing(null)
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </main>
   )
 }

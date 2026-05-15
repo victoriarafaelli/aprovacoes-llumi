@@ -19,6 +19,7 @@ import {
   MEDIA_ACCEPT,
   MEDIA_ACCEPT_HINT,
   isDirectImageUrl,
+  isDirectVideoUrl,
 } from '@/types/final'
 
 // ─── Helpers de tipo MIME ─────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ function FileUploadSlot({
   slotKey,
   label,
 }: {
-  accept: 'image/*' | 'video/*' | ''
+  accept: string
   acceptHint: string
   value: string          // URL pública no Storage ('' se ainda não enviado)
   onChange: (url: string) => void
@@ -324,7 +325,9 @@ function FileUploadSlot({
           <span className="text-sm font-medium">
             {label
               ? `${label} — Selecionar arquivo`
-              : accept === 'video/*' ? 'Selecionar vídeo' : 'Selecionar imagem'
+              : accept.startsWith('video') ? 'Selecionar vídeo'
+              : accept.includes('video') ? 'Selecionar imagem ou vídeo'
+              : 'Selecionar imagem'
             }
           </span>
           <span className="text-xs text-gray-300">{acceptHint}</span>
@@ -372,7 +375,86 @@ function MediaUploadFields({
     )
   }
 
-  // Multi (carrossel / stories) — vários slides em sequência
+  // Stories — pode ser vídeo único (≤ 59 s) OU múltiplos slides de imagem
+  if (kind === 'stories') {
+    const firstUrl    = mediaItems[0]?.url ?? ''
+    const isVideoMode = firstUrl ? isDirectVideoUrl(firstUrl) : false
+
+    // Modo vídeo: slot único com accept de vídeo
+    if (isVideoMode) {
+      return (
+        <div className="flex flex-col gap-2">
+          <FileUploadSlot
+            accept="video/*"
+            acceptHint="MP4 ou WebM recomendados · MOV aceito · máx. 59 s"
+            value={firstUrl}
+            onChange={(url) => {
+              if (!url) {
+                // Removeu o vídeo → volta para modo imagem com slot vazio
+                onChange([EMPTY_MEDIA_ITEM()])
+              } else {
+                onChange([{ url, label: '' }])
+              }
+            }}
+            folder={folder}
+            slotKey={`${itemIndex}_0`}
+          />
+          <p className="text-xs text-gray-400 pl-1">
+            Para usar imagens em vez de vídeo, remova o vídeo acima.
+          </p>
+        </div>
+      )
+    }
+
+    // Modo imagem (padrão) — multi-slide, com opção de enviar vídeo no primeiro slot
+    return (
+      <div className="flex flex-col gap-3">
+        {mediaItems.map((item, slotIdx) => (
+          <div key={slotIdx}>
+            <FileUploadSlot
+              accept={slotIdx === 0 ? 'image/*,video/*' : 'image/*'}
+              acceptHint={
+                slotIdx === 0
+                  ? 'JPG, PNG, WebP, GIF · ou MP4/MOV (máx. 59 s)'
+                  : 'JPG, PNG, WebP, GIF'
+              }
+              value={item.url}
+              onChange={(url) => {
+                const updated = mediaItems.map((m, i) => i === slotIdx ? { ...m, url } : m)
+                // Se enviou vídeo no slot 0, colapsa para slot único (remove os demais)
+                if (slotIdx === 0 && url && isDirectVideoUrl(url)) {
+                  onChange([{ url, label: '' }])
+                } else {
+                  onChange(updated)
+                }
+              }}
+              folder={folder}
+              slotKey={`${itemIndex}_${slotIdx}`}
+              label={`Slide ${slotIdx + 1}`}
+            />
+            {mediaItems.length > 1 && (
+              <button
+                type="button"
+                onClick={() => onChange(mediaItems.filter((_, i) => i !== slotIdx))}
+                className="text-xs text-red-400 hover:text-red-600 transition-colors mt-1 pl-1"
+              >
+                Remover slide
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChange([...mediaItems, EMPTY_MEDIA_ITEM()])}
+          className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors self-start pt-1"
+        >
+          + Adicionar slide
+        </button>
+      </div>
+    )
+  }
+
+  // Multi (carrossel) — vários slides em sequência
   return (
     <div className="flex flex-col gap-3">
       {mediaItems.map((item, slotIdx) => (
@@ -457,16 +539,22 @@ function NetworkSelector({
 // ─── Card de item ─────────────────────────────────────────────────────────────
 function ItemCard({
   index,
+  total,
   item,
   folder,
   onChange,
   onRemove,
+  onMoveUp,
+  onMoveDown,
 }: {
   index: number
+  total: number
   item: FinalReviewItemFormData
   folder: string
   onChange: (data: FinalReviewItemFormData) => void
   onRemove: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
 }) {
   const compatibleFormats = getCompatibleFormats(item.social_networks)
   const kind              = getMediaKind(item.type)
@@ -500,13 +588,33 @@ function ItemCard({
         <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">
           Conteúdo {index + 1}
         </span>
-        <button
-          onClick={onRemove}
-          className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center"
-          aria-label="Remover"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={index === 0}
+            className="text-gray-300 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-6 h-6 flex items-center justify-center text-base"
+            aria-label="Mover para cima"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            className="text-gray-300 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-6 h-6 flex items-center justify-center text-base"
+            aria-label="Mover para baixo"
+          >
+            ↓
+          </button>
+          <button
+            onClick={onRemove}
+            className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none w-6 h-6 flex items-center justify-center ml-1"
+            aria-label="Remover"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-4">
@@ -568,7 +676,9 @@ function ItemCard({
                 ? 'Vídeo final'
                 : kind === 'image'
                   ? 'Imagem final'
-                  : 'Slides'
+                  : kind === 'stories'
+                    ? 'Stories (imagem ou vídeo)'
+                    : 'Slides'
               }
             </label>
             <MediaUploadFields
@@ -663,6 +773,14 @@ export default function FinalCriarPage() {
   const removeItem = (i: number) => {
     if (items.length === 1) return
     setItems((prev) => prev.filter((_, idx) => idx !== i))
+  }
+  const moveItem = (from: number, to: number) => {
+    setItems((prev) => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
   }
 
   const handleSubmit = async () => {
@@ -795,10 +913,13 @@ export default function FinalCriarPage() {
           <ItemCard
             key={index}
             index={index}
+            total={items.length}
             item={item}
             folder={uploadSession}
             onChange={(data) => updateItem(index, data)}
             onRemove={() => removeItem(index)}
+            onMoveUp={() => moveItem(index, index - 1)}
+            onMoveDown={() => moveItem(index, index + 1)}
           />
         ))}
 

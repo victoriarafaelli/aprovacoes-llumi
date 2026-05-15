@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -70,8 +70,203 @@ function PlanStatusBadge({ status }: { status: Plan['status'] }) {
   )
 }
 
+// ─── Modal de edição de conteúdo ─────────────────────────────────────────────
+function EditContentModal({
+  content,
+  planId,
+  onSave,
+  onClose,
+}: {
+  content: Content
+  planId: string
+  onSave: (updated: Content) => void
+  onClose: () => void
+}) {
+  const [title,        setTitle]        = useState(content.title)
+  const [copyText,     setCopyText]     = useState(content.copy_text ?? '')
+  const [videoScript,  setVideoScript]  = useState(content.video_script ?? '')
+  const [observations, setObservations] = useState(content.observations ?? '')
+  const [publishDate,  setPublishDate]  = useState(content.publish_date ?? '')
+  const [publishTime,  setPublishTime]  = useState(content.publish_time ?? '')
+  const [referenceUrl, setReferenceUrl] = useState(content.reference_url ?? '')
+  const [saving, setSaving]             = useState(false)
+  const [saveError, setSaveError]       = useState<string | null>(null)
+
+  const isVideo = isVideoFormat(content.type)
+
+  const handleSave = async () => {
+    if (!title.trim()) { setSaveError('O título é obrigatório.'); return }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/plans/${planId}/contents/${content.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          title:        title.trim(),
+          copy_text:    copyText    || null,
+          video_script: videoScript || null,
+          observations: observations || null,
+          publish_date: publishDate  || null,
+          publish_time: publishTime  || null,
+          reference_url: referenceUrl || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setSaveError(data.error || 'Erro ao salvar.'); setSaving(false); return }
+      onSave({ ...content, ...data })
+    } catch {
+      setSaveError('Erro de conexão. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+          <h3 className="font-semibold text-gray-900">Editar conteúdo</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">×</button>
+        </div>
+
+        <div className="px-5 py-4 flex flex-col gap-4">
+          {/* Título */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Título</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+            />
+          </div>
+
+          {/* Copy ou Roteiro */}
+          {!isVideo ? (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Copy <span className="font-normal text-gray-300">(opcional)</span>
+              </label>
+              <textarea
+                value={copyText}
+                onChange={(e) => setCopyText(e.target.value)}
+                rows={4}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Roteiro <span className="font-normal text-gray-300">(opcional)</span>
+              </label>
+              <textarea
+                value={videoScript}
+                onChange={(e) => setVideoScript(e.target.value)}
+                rows={4}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
+              />
+            </div>
+          )}
+
+          {/* Link de referência */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Link de referência <span className="font-normal text-gray-300">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={referenceUrl}
+              onChange={(e) => setReferenceUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+            />
+          </div>
+
+          {/* Data e horário */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Data de publicação <span className="font-normal text-gray-300">(opcional)</span>
+              </label>
+              <input
+                type="date"
+                value={publishDate}
+                onChange={(e) => setPublishDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
+            <div className="w-36">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Horário <span className="font-normal text-gray-300">(opcional)</span>
+              </label>
+              <input
+                type="time"
+                value={publishTime}
+                onChange={(e) => setPublishTime(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Observações */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Observações <span className="font-normal text-gray-300">(opcional)</span>
+            </label>
+            <textarea
+              value={observations}
+              onChange={(e) => setObservations(e.target.value)}
+              rows={2}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
+            />
+          </div>
+
+          {saveError && (
+            <p className="text-xs text-red-500">{saveError}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2 sticky bottom-0 bg-white rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white transition-colors"
+          >
+            {saving ? 'Salvando...' : 'Salvar alterações'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Card de conteúdo no detalhe ──────────────────────────────────────────────
-function ContentDetailCard({ content, index }: { content: Content; index: number }) {
+function ContentDetailCard({
+  content,
+  index,
+  total,
+  reordering,
+  onMoveUp,
+  onMoveDown,
+  onEdit,
+}: {
+  content: Content
+  index: number
+  total: number
+  reordering: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onEdit: () => void
+}) {
   const [scriptOpen, setScriptOpen] = useState(false)
   const [obsOpen, setObsOpen]       = useState(false)
   const isVideo = isVideoFormat(content.type)
@@ -85,7 +280,7 @@ function ContentDetailCard({ content, index }: { content: Content; index: number
   return (
     <div className={`bg-white rounded-2xl border border-gray-100 border-l-4 shadow-sm overflow-hidden ${borderMap[content.approval_status]}`}>
       <div className="px-5 py-4 flex flex-col gap-3">
-        {/* Linha 1: status à direita, badges à esquerda */}
+        {/* Linha 1: status + ações à direita, badges à esquerda */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1.5">
             <NetworkBadges networks={content.social_networks} />
@@ -96,7 +291,32 @@ function ContentDetailCard({ content, index }: { content: Content; index: number
               )}
             </div>
           </div>
-          <StatusBadge status={content.approval_status} />
+          <div className="flex items-center gap-1 shrink-0">
+            {reordering ? (
+              <>
+                <button
+                  onClick={onMoveUp}
+                  disabled={index === 0}
+                  className="text-gray-300 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50"
+                  aria-label="Mover para cima"
+                >↑</button>
+                <button
+                  onClick={onMoveDown}
+                  disabled={index === total - 1}
+                  className="text-gray-300 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50"
+                  aria-label="Mover para baixo"
+                >↓</button>
+              </>
+            ) : (
+              <button
+                onClick={onEdit}
+                className="text-xs font-medium text-indigo-500 hover:text-indigo-700 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                Editar
+              </button>
+            )}
+            <StatusBadge status={content.approval_status} />
+          </div>
         </div>
 
         {/* Número + Título + data/hora */}
@@ -187,6 +407,14 @@ function ContentDetailCard({ content, index }: { content: Content; index: number
             )}
           </div>
         )}
+
+        {/* Comentário do cliente */}
+        {content.client_feedback && (
+          <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            <p className="text-xs font-medium text-amber-600 mb-1">Comentário do cliente</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{content.client_feedback}</p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -222,6 +450,21 @@ export default function PlanoDetailPage() {
         setError('Erro ao carregar o planejamento.')
         setLoading(false)
       })
+  }, [id])
+
+  const updateContent = useCallback((updated: Content) => {
+    setContents((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+  }, [])
+
+  const reorderContents = useCallback(async (newOrder: Content[]) => {
+    setContents(newOrder)
+    try {
+      await fetch(`/api/plans/${id}/reorder`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ order: newOrder.map((c) => c.id) }),
+      })
+    } catch { /* silencioso */ }
   }, [id])
 
   // Stats
@@ -309,7 +552,13 @@ export default function PlanoDetailPage() {
       </div>
 
       {/* Filtros rápidos por status */}
-      <FilteredContentList contents={contents} plan={plan} />
+      <FilteredContentList
+        contents={contents}
+        plan={plan}
+        planId={id}
+        onUpdateContent={updateContent}
+        onReorder={reorderContents}
+      />
     </main>
   )
 }
@@ -317,8 +566,23 @@ export default function PlanoDetailPage() {
 // ─── Lista com filtro ─────────────────────────────────────────────────────────
 type Filter = 'all' | 'pending' | 'approved' | 'rejected'
 
-function FilteredContentList({ contents, plan }: { contents: Content[]; plan: Plan }) {
-  const [filter, setFilter] = useState<Filter>('all')
+function FilteredContentList({
+  contents,
+  plan,
+  planId,
+  onUpdateContent,
+  onReorder,
+}: {
+  contents: Content[]
+  plan: Plan
+  planId: string
+  onUpdateContent: (updated: Content) => void
+  onReorder: (newOrder: Content[]) => void
+}) {
+  const [filter,     setFilter]     = useState<Filter>('all')
+  const [reordering, setReordering] = useState(false)
+  const [editing,    setEditing]    = useState<Content | null>(null)
+  const [copied,     setCopied]     = useState(false)
 
   const stats = getPlanStats(contents)
 
@@ -326,33 +590,60 @@ function FilteredContentList({ contents, plan }: { contents: Content[]; plan: Pl
     ? contents
     : contents.filter((c) => c.approval_status === filter)
 
-  const filters: { key: Filter; label: string; count: number; activeClass: string }[] = [
+  const filterDefs: { key: Filter; label: string; count: number; activeClass: string }[] = [
     { key: 'all',      label: 'Todos',      count: stats.total,    activeClass: 'bg-gray-900 text-white' },
     { key: 'pending',  label: 'Pendentes',  count: stats.pending,  activeClass: 'bg-gray-700 text-white' },
     { key: 'approved', label: 'Aprovados',  count: stats.approved, activeClass: 'bg-green-600 text-white' },
     { key: 'rejected', label: 'Reprovados', count: stats.rejected, activeClass: 'bg-red-500 text-white' },
   ]
 
+  const moveContent = (from: number, to: number) => {
+    const next = [...contents]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    onReorder(next)
+  }
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/aprovar/${plan.share_token}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-5">
-      {/* Tabs de filtro */}
-      <div className="flex gap-2 mb-5 flex-wrap">
-        {filters.map(({ key, label, count, activeClass }) => (
+      {/* Toolbar: filtros + reordenar */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <div className="flex gap-2 flex-wrap flex-1">
+          {filterDefs.map(({ key, label, count, activeClass }) => (
+            <button
+              key={key}
+              onClick={() => { setFilter(key); setReordering(false) }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                filter === key
+                  ? `${activeClass} border-transparent`
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {label}
+              <span className={`ml-1.5 ${filter === key ? 'opacity-70' : 'text-gray-400'}`}>
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+        {filter === 'all' && (
           <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-              filter === key
-                ? `${activeClass} border-transparent`
-                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+            onClick={() => setReordering((v) => !v)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+              reordering
+                ? 'bg-indigo-600 text-white border-transparent'
+                : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-500'
             }`}
           >
-            {label}
-            <span className={`ml-1.5 ${filter === key ? 'opacity-70' : 'text-gray-400'}`}>
-              {count}
-            </span>
+            {reordering ? 'Concluir' : 'Reordenar'}
           </button>
-        ))}
+        )}
       </div>
 
       {/* Cards de conteúdo */}
@@ -362,14 +653,21 @@ function FilteredContentList({ contents, plan }: { contents: Content[]; plan: Pl
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {filtered.map((content, i) => (
-            <ContentDetailCard
-              key={content.id}
-              content={content}
-              // mantém numeração original mesmo com filtro ativo
-              index={contents.indexOf(content)}
-            />
-          ))}
+          {filtered.map((content) => {
+            const originalIndex = contents.indexOf(content)
+            return (
+              <ContentDetailCard
+                key={content.id}
+                content={content}
+                index={originalIndex}
+                total={contents.length}
+                reordering={reordering}
+                onMoveUp={() => moveContent(originalIndex, originalIndex - 1)}
+                onMoveDown={() => moveContent(originalIndex, originalIndex + 1)}
+                onEdit={() => setEditing(content)}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -382,20 +680,33 @@ function FilteredContentList({ contents, plan }: { contents: Content[]; plan: Pl
               {typeof window !== 'undefined' ? window.location.origin : ''}/aprovar/{plan.share_token}
             </span>
             <button
-              onClick={() =>
-                navigator.clipboard.writeText(
-                  `${window.location.origin}/aprovar/${plan.share_token}`
-                )
-              }
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors whitespace-nowrap"
+              onClick={handleCopyLink}
+              className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                copied
+                  ? 'text-green-600 bg-green-50'
+                  : 'text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50'
+              }`}
             >
-              Copiar
+              {copied ? 'Copiado!' : 'Copiar'}
             </button>
           </div>
         </div>
       )}
 
       <div className="h-8" />
+
+      {/* Modal de edição */}
+      {editing && (
+        <EditContentModal
+          content={editing}
+          planId={planId}
+          onSave={(updated) => {
+            onUpdateContent(updated)
+            setEditing(null)
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   )
 }

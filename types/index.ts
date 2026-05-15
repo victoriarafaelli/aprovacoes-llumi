@@ -139,11 +139,11 @@ export interface Content {
   copy_text: string | null
   video_script: string | null
   observations: string | null
-  // Novos campos
   publish_date: string | null    // formato ISO: "YYYY-MM-DD"
   publish_time: string | null    // formato "HH:MM"
   reference_url: string | null   // URL externa de referência
   approval_status: ApprovalStatus
+  client_feedback: string | null // comentário do cliente (primeira aprovação)
   order_position: number
   created_at: string
 }

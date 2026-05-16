@@ -440,7 +440,7 @@ export default function PlanoDetailPage() {
         } else {
           setPlan(data)
           const sorted = [...(data.contents || [])].sort(
-            (a: Content, b: Content) => a.order_position - b.order_position
+            (a: Content, b: Content) => (a.order_position ?? 0) - (b.order_position ?? 0)
           )
           setContents(sorted)
         }

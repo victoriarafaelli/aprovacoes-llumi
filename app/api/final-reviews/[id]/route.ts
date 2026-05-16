@@ -10,14 +10,29 @@ export async function GET(
   const { id } = await params
   const supabase = createServerClient()
 
+  // Ordena pelo order_position quando disponível, com fallback para created_at.
+  // Usamos created_at no ORDER BY do Supabase (coluna sempre presente) e
+  // fazemos sort final por order_position no próprio JSON antes de retornar —
+  // assim o endpoint não quebra em bancos onde order_position ainda não existe.
   const { data, error } = await supabase
     .from('final_reviews')
     .select('*, items:final_review_items(*)')
     .eq('id', id)
-    .order('order_position', { referencedTable: 'final_review_items', ascending: true })
+    .order('created_at', { referencedTable: 'final_review_items', ascending: true })
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+
+  // Ordena os itens por order_position se a coluna existir, mantém created_at como fallback
+  if (Array.isArray(data?.items)) {
+    data.items = data.items.sort((a: { order_position?: number; created_at: string }, b: { order_position?: number; created_at: string }) => {
+      const aPos = a.order_position ?? Infinity
+      const bPos = b.order_position ?? Infinity
+      if (aPos !== bPos) return aPos - bPos
+      return a.created_at.localeCompare(b.created_at)
+    })
+  }
+
   return NextResponse.json(data)
 }
 

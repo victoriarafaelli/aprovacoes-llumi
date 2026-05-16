@@ -13,11 +13,21 @@ export async function GET(
     .from('plans')
     .select('*, contents(*)')
     .eq('id', id)
-    .order('order_position', { referencedTable: 'contents', ascending: true })
+    .order('created_at', { referencedTable: 'contents', ascending: true })
     .single()
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 404 })
+  }
+
+  // Ordena os conteúdos por order_position se a coluna existir, com fallback para created_at
+  if (Array.isArray(plan?.contents)) {
+    plan.contents = plan.contents.sort((a: { order_position?: number; created_at: string }, b: { order_position?: number; created_at: string }) => {
+      const aPos = a.order_position ?? Infinity
+      const bPos = b.order_position ?? Infinity
+      if (aPos !== bPos) return aPos - bPos
+      return a.created_at.localeCompare(b.created_at)
+    })
   }
 
   return NextResponse.json(plan)

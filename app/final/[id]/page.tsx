@@ -301,7 +301,8 @@ function ItemCard({
   onEdit: () => void
 }) {
   const kind       = getMediaKind(item.type)
-  const mediaUrls  = item.media_items.map((m) => m.url).filter(Boolean)
+  // Defende contra media_items null (registros antigos podem ter null no banco)
+  const mediaUrls  = (item.media_items ?? []).map((m) => m.url).filter(Boolean)
   const isMulti    = kind === 'multi' || kind === 'stories'
 
   return (
@@ -314,7 +315,7 @@ function ItemCard({
               <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
                 {CONTENT_TYPE_LABELS[item.type]}
               </span>
-              {item.social_networks.map((n) => (
+              {(item.social_networks ?? []).map((n) => (
                 <span key={n} className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
                   {NETWORK_LABELS[n]}
                 </span>
@@ -456,7 +457,16 @@ export default function FinalDetailPage() {
   useEffect(() => {
     fetch(`/api/final-reviews/${id}`)
       .then((r) => r.json())
-      .then((d) => { setReview(d); setLoading(false) })
+      .then((d) => {
+        // Se a API devolver { error: ... }, trata como "não encontrado"
+        if (d && d.error) {
+          setReview(null)
+        } else {
+          // Garante que items é sempre um array (proteção contra null do banco)
+          setReview({ ...d, items: Array.isArray(d.items) ? d.items : [] })
+        }
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [id])
 

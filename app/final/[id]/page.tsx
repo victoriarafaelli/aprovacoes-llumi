@@ -470,6 +470,28 @@ export default function FinalDetailPage() {
       .catch(() => setLoading(false))
   }, [id])
 
+  // ── Callbacks declarados ANTES dos early returns para não violar Rules of Hooks ──
+  const updateItem = useCallback((updated: FinalReviewItem) => {
+    setReview((prev) => {
+      if (!prev) return prev
+      return { ...prev, items: prev.items.map((it) => it.id === updated.id ? updated : it) }
+    })
+  }, [])
+
+  const moveItem = useCallback(async (items: FinalReviewItem[], from: number, to: number) => {
+    const next = [...items]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    setReview((prev) => prev ? { ...prev, items: next } : prev)
+    try {
+      await fetch(`/api/final-reviews/${id}/reorder`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ order: next.map((it) => it.id) }),
+      })
+    } catch { /* silencioso */ }
+  }, [id])
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50">
@@ -538,27 +560,6 @@ export default function FinalDetailPage() {
       setSending(false)
     }
   }
-
-  const updateItem = useCallback((updated: FinalReviewItem) => {
-    setReview((prev) => {
-      if (!prev) return prev
-      return { ...prev, items: prev.items.map((it) => it.id === updated.id ? updated : it) }
-    })
-  }, [])
-
-  const moveItem = useCallback(async (items: FinalReviewItem[], from: number, to: number) => {
-    const next = [...items]
-    const [item] = next.splice(from, 1)
-    next.splice(to, 0, item)
-    setReview((prev) => prev ? { ...prev, items: next } : prev)
-    try {
-      await fetch(`/api/final-reviews/${id}/reorder`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ order: next.map((it) => it.id) }),
-      })
-    } catch { /* silencioso */ }
-  }, [id])
 
   const tabs: { key: FilterTab; label: string; count: number }[] = [
     { key: 'all',      label: 'Todos',      count: stats.total },

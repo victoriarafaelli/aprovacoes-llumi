@@ -174,7 +174,7 @@ function ClientGroup({
           <div>
             <h2 className="text-base font-bold text-gray-900">{clientName}</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              {reviews.length} aprovação{reviews.length !== 1 ? 'ões' : ''}
+              {reviews.length} {reviews.length !== 1 ? 'aprovações' : 'aprovação'}
               {globalStats.total > 0 && ` · ${globalStats.total} conteúdo${globalStats.total !== 1 ? 's' : ''}`}
             </p>
           </div>
@@ -264,7 +264,7 @@ export default function FinalDashboardPage() {
               <h1 className="text-xl font-bold text-gray-900">Aprovação Final</h1>
               <p className="text-sm text-gray-500 mt-0.5">
                 {sortedClients.length > 0
-                  ? `${sortedClients.length} cliente${sortedClients.length !== 1 ? 's' : ''} · ${reviews.length} aprovação${reviews.length !== 1 ? 'ões' : ''}`
+                  ? `${sortedClients.length} cliente${sortedClients.length !== 1 ? 's' : ''} · ${reviews.length} ${reviews.length !== 1 ? 'aprovações' : 'aprovação'}`
                   : 'Envie conteúdos finalizados para aprovação'}
               </p>
             </div>

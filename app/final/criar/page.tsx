@@ -19,7 +19,6 @@ import {
   MEDIA_ACCEPT,
   MEDIA_ACCEPT_HINT,
   isDirectImageUrl,
-  isDirectVideoUrl,
 } from '@/types/final'
 
 // ─── Helpers de tipo MIME ─────────────────────────────────────────────────────
@@ -375,58 +374,21 @@ function MediaUploadFields({
     )
   }
 
-  // Stories — pode ser vídeo único (≤ 59 s) OU múltiplos slides de imagem
+  // Stories — sequência mista: cada slide pode ser imagem OU vídeo livremente
   if (kind === 'stories') {
-    const firstUrl    = mediaItems[0]?.url ?? ''
-    const isVideoMode = firstUrl ? isDirectVideoUrl(firstUrl) : false
-
-    // Modo vídeo: slot único com accept de vídeo
-    if (isVideoMode) {
-      return (
-        <div className="flex flex-col gap-2">
-          <FileUploadSlot
-            accept="video/*"
-            acceptHint="MP4 ou WebM recomendados · MOV aceito · máx. 59 s"
-            value={firstUrl}
-            onChange={(url) => {
-              if (!url) {
-                // Removeu o vídeo → volta para modo imagem com slot vazio
-                onChange([EMPTY_MEDIA_ITEM()])
-              } else {
-                onChange([{ url, label: '' }])
-              }
-            }}
-            folder={folder}
-            slotKey={`${itemIndex}_0`}
-          />
-          <p className="text-xs text-gray-400 pl-1">
-            Para usar imagens em vez de vídeo, remova o vídeo acima.
-          </p>
-        </div>
-      )
-    }
-
-    // Modo imagem (padrão) — multi-slide, com opção de enviar vídeo no primeiro slot
     return (
       <div className="flex flex-col gap-3">
+        <p className="text-xs text-gray-400 -mb-1">
+          Cada slide pode ser imagem ou vídeo. Misture os dois tipos à vontade.
+        </p>
         {mediaItems.map((item, slotIdx) => (
           <div key={slotIdx}>
             <FileUploadSlot
-              accept={slotIdx === 0 ? 'image/*,video/*' : 'image/*'}
-              acceptHint={
-                slotIdx === 0
-                  ? 'JPG, PNG, WebP, GIF · ou MP4/MOV (máx. 59 s)'
-                  : 'JPG, PNG, WebP, GIF'
-              }
+              accept="image/*,video/*"
+              acceptHint="JPG, PNG, WebP, GIF · ou MP4/MOV (máx. 59 s)"
               value={item.url}
               onChange={(url) => {
-                const updated = mediaItems.map((m, i) => i === slotIdx ? { ...m, url } : m)
-                // Se enviou vídeo no slot 0, colapsa para slot único (remove os demais)
-                if (slotIdx === 0 && url && isDirectVideoUrl(url)) {
-                  onChange([{ url, label: '' }])
-                } else {
-                  onChange(updated)
-                }
+                onChange(mediaItems.map((m, i) => i === slotIdx ? { ...m, url } : m))
               }}
               folder={folder}
               slotKey={`${itemIndex}_${slotIdx}`}

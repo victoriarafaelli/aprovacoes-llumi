@@ -130,8 +130,8 @@ function ApprovalCard({
   onFeedbackChange: (id: string, feedback: string) => Promise<void>
 }) {
   const kind      = getMediaKind(item.type)
-  const mediaUrls = item.media_items.map((m) => m.url).filter(Boolean)
-  const isMulti   = kind === 'multi'
+  const mediaUrls = (item.media_items ?? []).map((m) => m.url).filter(Boolean)
+  const isMulti   = kind === 'multi' || kind === 'stories'
 
   const [feedback,    setFeedback]    = useState(item.client_feedback ?? '')
   const [savingFb,    setSavingFb]    = useState(false)

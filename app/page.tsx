@@ -334,7 +334,7 @@ export default function HomePage() {
               <p className="text-sm text-gray-500 mt-0.5">
                 {sortedClients.length > 0
                   ? `${sortedClients.length} cliente${sortedClients.length !== 1 ? 's' : ''} · ${plans.length} planejamento${plans.length !== 1 ? 's' : ''}`
-                  : 'Gerencie os planejamentos dos seus clientes'}
+                  : 'Gerencie as aprovações dos seus clientes'}
               </p>
             </div>
             <Link

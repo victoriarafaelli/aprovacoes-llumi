@@ -19,7 +19,7 @@ export default function AppTabs() {
               : 'border-transparent text-gray-400 hover:text-gray-600'
           }`}
         >
-          Planejamentos
+          Aprovações
         </Link>
         <Link
           href="/final"

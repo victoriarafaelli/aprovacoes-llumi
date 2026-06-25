@@ -259,23 +259,33 @@ function EditItemModal({
           {/* ── Seção de Mídia ────────────────────────────────────────────── */}
           {kind !== 'none' && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">
-                {kind === 'multi'   ? 'Slides do Carrossel'
-                : kind === 'stories' ? 'Slides dos Stories'
-                : 'Mídia'}
-              </label>
+              {/* Cabeçalho com tipo detectado + formatos aceitos */}
+              <div className="flex items-baseline justify-between mb-2">
+                <label className="text-xs font-medium text-gray-500">
+                  {kind === 'multi'   ? 'Carrossel — slides'
+                  : kind === 'stories' ? 'Stories — slides'
+                  : kind === 'video'   ? 'Vídeo'
+                  : 'Imagem'}
+                </label>
+                <span className="text-[11px] text-gray-400">
+                  {kind === 'video'   ? 'MP4, WebM ou MOV'
+                  : kind === 'image'   ? 'JPG, PNG, GIF, WebP'
+                  : kind === 'stories' ? 'imagem ou vídeo por slide'
+                  : /* multi */         'JPG, PNG, GIF, WebP'}
+                </span>
+              </div>
 
               {isMultiSlot ? (
                 /* Múltiplos slides — carrossel ou stories */
                 <div className="flex flex-col gap-3">
-                  {kind === 'stories' && (
-                    <p className="text-xs text-gray-400 -mb-1">
-                      Cada slide pode ser imagem ou vídeo. Misture os dois tipos à vontade.
+                  {kind === 'stories' && mediaItems.length > 0 && (
+                    <p className="text-xs text-indigo-500 -mb-1 font-medium">
+                      Cada slide pode ser imagem ou vídeo independentemente.
                     </p>
                   )}
 
                   {mediaItems.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">Nenhum slide. Adicione abaixo.</p>
+                    <p className="text-xs text-gray-400 italic">Nenhum slide ainda. Adicione abaixo.</p>
                   ) : (
                     mediaItems.map((mi, slotIdx) => (
                       <div key={slotIdx}>
@@ -290,7 +300,11 @@ function EditItemModal({
                           }
                           folder={storageFolder}
                           slotKey={`edit_${item.id.replace(/-/g, '')}_${slotIdx}`}
-                          label={`Slide ${slotIdx + 1}`}
+                          label={
+                            kind === 'stories'
+                              ? `Slide ${slotIdx + 1} · imagem ou vídeo`
+                              : `Slide ${slotIdx + 1}`
+                          }
                         />
                         {mediaItems.length > 1 && (
                           <button
@@ -316,7 +330,7 @@ function EditItemModal({
                   </button>
                 </div>
               ) : (
-                /* Slot único — imagem ou vídeo */
+                /* Slot único — imagem ou vídeo, conforme o tipo do item */
                 <MediaUploadSlot
                   accept={MEDIA_ACCEPT[kind]}
                   acceptHint={MEDIA_ACCEPT_HINT[kind]}
@@ -825,9 +839,11 @@ export default function FinalDetailPage() {
         )}
       </div>
 
-      {/* Modal de edição */}
+      {/* Modal de edição — key={editing.id} garante remontagem completa ao trocar de item,
+           evitando que o estado de mediaItems de um tipo contamine outro */}
       {editing && (
         <EditItemModal
+          key={editing.id}
           item={editing}
           reviewId={id}
           storageFolder={review.storage_folder ?? id.replace(/-/g, '')}

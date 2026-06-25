@@ -317,7 +317,7 @@ export function MediaUploadSlot({
               : 'Selecionar imagem'
             }
           </span>
-          <span className="text-xs text-gray-300">{acceptHint}</span>
+          <span className="text-xs text-gray-400">{acceptHint}</span>
         </button>
       )}
 

@@ -7,6 +7,7 @@ import AppTabs from '@/components/AppTabs'
 import {
   FinalReview,
   FinalReviewItem,
+  MediaItem,
   getReviewStats,
   getMediaKind,
   getYouTubeEmbedUrl,
@@ -17,7 +18,11 @@ import {
   formatDate,
   CONTENT_TYPE_LABELS,
   NETWORK_LABELS,
+  MEDIA_ACCEPT,
+  MEDIA_ACCEPT_HINT,
+  EMPTY_MEDIA_ITEM,
 } from '@/types/final'
+import { MediaUploadSlot } from '@/components/MediaUploadSlot'
 
 type ReviewStatus = 'draft' | 'sent' | 'completed'
 type FilterTab    = 'all' | 'pending' | 'approved' | 'rejected'
@@ -149,27 +154,53 @@ function CarouselViewer({ urls }: { urls: string[] }) {
 function EditItemModal({
   item,
   reviewId,
+  storageFolder,
   onSave,
   onClose,
 }: {
-  item: FinalReviewItem
-  reviewId: string
-  onSave: (updated: FinalReviewItem) => void
-  onClose: () => void
+  item:          FinalReviewItem
+  reviewId:      string
+  /** Pasta no Supabase Storage para upload de mídias novas (32 hex chars).
+   *  Para reviews antigas sem storage_folder, usa o reviewId sem hífens como fallback. */
+  storageFolder: string
+  onSave:        (updated: FinalReviewItem) => void
+  onClose:       () => void
 }) {
+  const kind = getMediaKind(item.type)
+
   const [title,        setTitle]        = useState(item.title)
   const [caption,      setCaption]      = useState(item.caption ?? '')
   const [observations, setObservations] = useState(item.observations ?? '')
   const [publishDate,  setPublishDate]  = useState(item.publish_date ?? '')
   const [publishTime,  setPublishTime]  = useState(item.publish_time ?? '')
-  const [saving,    setSaving]          = useState(false)
-  const [saveError, setSaveError]       = useState<string | null>(null)
+  const [saving,       setSaving]       = useState(false)
+  const [saveError,    setSaveError]    = useState<string | null>(null)
+
+  // Estado da mídia: inicializa com os dados do item.
+  // Para registros antigos com media_items null → inicia com slot vazio.
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => {
+    const existing = item.media_items ?? []
+    // Para tipos com mídia única: garante sempre ao menos 1 slot visível
+    if (kind !== 'none' && kind !== 'multi' && kind !== 'stories' && existing.length === 0) {
+      return [EMPTY_MEDIA_ITEM()]
+    }
+    return existing.length > 0 ? existing : []
+  })
 
   const handleSave = async () => {
     if (!title.trim()) { setSaveError('O título é obrigatório.'); return }
     setSaving(true)
     setSaveError(null)
     try {
+      // Só envia slots que têm URL (ignora slots vazios não preenchidos)
+      const mediaToSave = mediaItems.filter((m) => m.url.trim() !== '')
+
+      // Identifica quais URLs antigas foram substituídas ou removidas,
+      // para limpeza do Storage após salvar com sucesso
+      const oldUrls = (item.media_items ?? []).map((m) => m.url).filter(Boolean)
+      const newUrls = new Set(mediaToSave.map((m) => m.url).filter(Boolean))
+      const urlsToDelete = oldUrls.filter((url) => !newUrls.has(url))
+
       const res = await fetch(`/api/final-reviews/${reviewId}/items/${item.id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -179,10 +210,22 @@ function EditItemModal({
           observations: observations || null,
           publish_date: publishDate  || null,
           publish_time: publishTime  || null,
+          media_items:  mediaToSave,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setSaveError(data.error || 'Erro ao salvar.'); setSaving(false); return }
+
+      // Deleta arquivos antigos do Storage em background (não bloqueia o fluxo)
+      // O link da aprovação continuará funcionando — os novos arquivos já foram salvos no banco.
+      if (urlsToDelete.length > 0) {
+        fetch('/api/final-reviews/delete-media', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ urls: urlsToDelete }),
+        }).catch(() => { /* silencioso — Storage pode ser limpo manualmente se necessário */ })
+      }
+
       onSave({ ...item, ...data })
     } catch {
       setSaveError('Erro de conexão. Tente novamente.')
@@ -190,6 +233,8 @@ function EditItemModal({
       setSaving(false)
     }
   }
+
+  const isMultiSlot = kind === 'multi' || kind === 'stories'
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
@@ -200,6 +245,7 @@ function EditItemModal({
         </div>
 
         <div className="px-5 py-4 flex flex-col gap-4">
+          {/* Título */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Título</label>
             <input
@@ -210,6 +256,80 @@ function EditItemModal({
             />
           </div>
 
+          {/* ── Seção de Mídia ────────────────────────────────────────────── */}
+          {kind !== 'none' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">
+                {kind === 'multi'   ? 'Slides do Carrossel'
+                : kind === 'stories' ? 'Slides dos Stories'
+                : 'Mídia'}
+              </label>
+
+              {isMultiSlot ? (
+                /* Múltiplos slides — carrossel ou stories */
+                <div className="flex flex-col gap-3">
+                  {kind === 'stories' && (
+                    <p className="text-xs text-gray-400 -mb-1">
+                      Cada slide pode ser imagem ou vídeo. Misture os dois tipos à vontade.
+                    </p>
+                  )}
+
+                  {mediaItems.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">Nenhum slide. Adicione abaixo.</p>
+                  ) : (
+                    mediaItems.map((mi, slotIdx) => (
+                      <div key={slotIdx}>
+                        <MediaUploadSlot
+                          accept={MEDIA_ACCEPT[kind]}
+                          acceptHint={MEDIA_ACCEPT_HINT[kind]}
+                          value={mi.url}
+                          onChange={(url) =>
+                            setMediaItems((prev) =>
+                              prev.map((m, i) => (i === slotIdx ? { ...m, url } : m))
+                            )
+                          }
+                          folder={storageFolder}
+                          slotKey={`edit_${item.id.replace(/-/g, '')}_${slotIdx}`}
+                          label={`Slide ${slotIdx + 1}`}
+                        />
+                        {mediaItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMediaItems((prev) => prev.filter((_, i) => i !== slotIdx))
+                            }
+                            className="text-xs text-red-400 hover:text-red-600 transition-colors mt-1 pl-1"
+                          >
+                            Remover slide
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setMediaItems((prev) => [...prev, EMPTY_MEDIA_ITEM()])}
+                    className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors self-start pt-1"
+                  >
+                    + Adicionar slide
+                  </button>
+                </div>
+              ) : (
+                /* Slot único — imagem ou vídeo */
+                <MediaUploadSlot
+                  accept={MEDIA_ACCEPT[kind]}
+                  acceptHint={MEDIA_ACCEPT_HINT[kind]}
+                  value={mediaItems[0]?.url ?? ''}
+                  onChange={(url) => setMediaItems([{ url, label: '' }])}
+                  folder={storageFolder}
+                  slotKey={`edit_${item.id.replace(/-/g, '')}_0`}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Legenda */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Legenda <span className="font-normal text-gray-300">(opcional)</span>
@@ -222,6 +342,7 @@ function EditItemModal({
             />
           </div>
 
+          {/* Data e horário */}
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -247,6 +368,7 @@ function EditItemModal({
             </div>
           </div>
 
+          {/* Observações */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Observações <span className="font-normal text-gray-300">(opcional)</span>
@@ -708,6 +830,7 @@ export default function FinalDetailPage() {
         <EditItemModal
           item={editing}
           reviewId={id}
+          storageFolder={review.storage_folder ?? id.replace(/-/g, '')}
           onSave={(updated) => {
             updateItem(updated)
             setEditing(null)

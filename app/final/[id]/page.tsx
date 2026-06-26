@@ -22,6 +22,7 @@ import {
   MEDIA_ACCEPT_HINT,
   EMPTY_MEDIA_ITEM,
 } from '@/types/final'
+import type { ContentType } from '@/types/final'
 import { MediaUploadSlot } from '@/components/MediaUploadSlot'
 
 type ReviewStatus = 'draft' | 'sent' | 'completed'
@@ -166,7 +167,21 @@ function EditItemModal({
   onSave:        (updated: FinalReviewItem) => void
   onClose:       () => void
 }) {
-  const kind = getMediaKind(item.type)
+  // ── CAUSA RAIZ CORRIGIDA ────────────────────────────────────────────────────
+  // Antes: `kind` era derivado de `item.type` (valor congelado do banco).
+  // Se o item foi criado com type='post' (o default de EMPTY_ITEM), `kind` ficava
+  // sempre 'image' mesmo para itens que deveriam ser reels/vídeo.
+  //
+  // Agora: `selectedType` é estado editável. O usuário pode corrigir o tipo
+  // diretamente no modal, e `kind` reage imediatamente à mudança.
+  // O tipo corrigido é salvo no PATCH junto com os outros campos.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  const [selectedType, setSelectedType] = useState<ContentType>(item.type)
+
+  // kind é REATIVO: muda quando o usuário troca o tipo no seletor
+  const kind        = getMediaKind(selectedType)
+  const isMultiSlot = kind === 'multi' || kind === 'stories'
 
   const [title,        setTitle]        = useState(item.title)
   const [caption,      setCaption]      = useState(item.caption ?? '')
@@ -177,28 +192,59 @@ function EditItemModal({
   const [saveError,    setSaveError]    = useState<string | null>(null)
 
   // Estado da mídia: inicializa com os dados do item.
-  // Para registros antigos com media_items null → inicia com slot vazio.
+  // Para registros antigos com media_items null ou vazios → inicia com slot adequado.
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => {
     const existing = item.media_items ?? []
-    // Para tipos com mídia única: garante sempre ao menos 1 slot visível
-    if (kind !== 'none' && kind !== 'multi' && kind !== 'stories' && existing.length === 0) {
+    // Para tipos de slot único (image/video): garante ao menos 1 slot visível
+    if (kind !== 'none' && !isMultiSlot && existing.length === 0) {
       return [EMPTY_MEDIA_ITEM()]
     }
     return existing.length > 0 ? existing : []
   })
+
+  // Troca de tipo: reajusta os slots de mídia conforme a nova estrutura
+  const handleTypeChange = (newType: ContentType) => {
+    const newKind       = getMediaKind(newType)
+    const newIsMulti    = newKind === 'multi' || newKind === 'stories'
+    const currentIsMulti = isMultiSlot
+
+    if (!currentIsMulti && newIsMulti) {
+      // Single → multi: mantém item atual como primeiro slide (se houver URL)
+      setMediaItems(mediaItems[0]?.url ? [mediaItems[0]] : [])
+    } else if (currentIsMulti && !newIsMulti) {
+      // Multi → single: mantém apenas o primeiro slide
+      setMediaItems([mediaItems[0] ?? EMPTY_MEDIA_ITEM()])
+    } else if (newKind === 'none') {
+      // Tipo sem mídia (artigo): limpa os slots
+      setMediaItems([])
+    } else if (!currentIsMulti && !newIsMulti && mediaItems.length === 0) {
+      // Continuou sendo single mas não tinha slot — garante um
+      setMediaItems([EMPTY_MEDIA_ITEM()])
+    }
+    setSelectedType(newType)
+  }
+
+  // Para retrocompatibilidade: se o slot único já tem uma URL de vídeo mas o tipo
+  // atual ainda diz 'image', permitimos vídeo no accept (detecção por URL).
+  // Isso cobre itens antigos que foram criados com tipo errado mas têm vídeo no Storage.
+  const singleSlotUrl   = !isMultiSlot ? (mediaItems[0]?.url ?? '') : ''
+  const existingIsVideo = singleSlotUrl ? isDirectVideoUrl(singleSlotUrl) : false
+  const singleAccept    = existingIsVideo
+    ? (MEDIA_ACCEPT[kind] === 'image/*' ? 'video/*,image/*' : MEDIA_ACCEPT[kind])
+    : MEDIA_ACCEPT[kind]
+  const singleAcceptHint = existingIsVideo && MEDIA_ACCEPT[kind] === 'image/*'
+    ? 'Vídeo ou imagem detectados no slot'
+    : MEDIA_ACCEPT_HINT[kind]
 
   const handleSave = async () => {
     if (!title.trim()) { setSaveError('O título é obrigatório.'); return }
     setSaving(true)
     setSaveError(null)
     try {
-      // Só envia slots que têm URL (ignora slots vazios não preenchidos)
       const mediaToSave = mediaItems.filter((m) => m.url.trim() !== '')
 
-      // Identifica quais URLs antigas foram substituídas ou removidas,
-      // para limpeza do Storage após salvar com sucesso
-      const oldUrls = (item.media_items ?? []).map((m) => m.url).filter(Boolean)
-      const newUrls = new Set(mediaToSave.map((m) => m.url).filter(Boolean))
+      const oldUrls      = (item.media_items ?? []).map((m) => m.url).filter(Boolean)
+      const newUrls      = new Set(mediaToSave.map((m) => m.url).filter(Boolean))
       const urlsToDelete = oldUrls.filter((url) => !newUrls.has(url))
 
       const res = await fetch(`/api/final-reviews/${reviewId}/items/${item.id}`, {
@@ -206,6 +252,7 @@ function EditItemModal({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           title:        title.trim(),
+          type:         selectedType,        // ← salva o tipo corrigido
           caption:      caption      || null,
           observations: observations || null,
           publish_date: publishDate  || null,
@@ -216,14 +263,12 @@ function EditItemModal({
       const data = await res.json()
       if (!res.ok) { setSaveError(data.error || 'Erro ao salvar.'); setSaving(false); return }
 
-      // Deleta arquivos antigos do Storage em background (não bloqueia o fluxo)
-      // O link da aprovação continuará funcionando — os novos arquivos já foram salvos no banco.
       if (urlsToDelete.length > 0) {
         fetch('/api/final-reviews/delete-media', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ urls: urlsToDelete }),
-        }).catch(() => { /* silencioso — Storage pode ser limpo manualmente se necessário */ })
+        }).catch(() => { /* silencioso */ })
       }
 
       onSave({ ...item, ...data })
@@ -233,8 +278,6 @@ function EditItemModal({
       setSaving(false)
     }
   }
-
-  const isMultiSlot = kind === 'multi' || kind === 'stories'
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
@@ -256,10 +299,27 @@ function EditItemModal({
             />
           </div>
 
+          {/* ── Formato / Tipo ─────────────────────────────────────────────── */}
+          {/* CORREÇÃO RAIZ: o usuário pode corrigir o tipo salvo no banco.
+              `kind` reage imediatamente e a seção de mídia adapta os slots e o
+              atributo accept corretamente. O novo tipo é salvo junto com o PATCH. */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Formato</label>
+            <select
+              value={selectedType}
+              onChange={(e) => handleTypeChange(e.target.value as ContentType)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent bg-white appearance-none"
+            >
+              {(Object.keys(CONTENT_TYPE_LABELS) as ContentType[]).map((ct) => (
+                <option key={ct} value={ct}>{CONTENT_TYPE_LABELS[ct]}</option>
+              ))}
+            </select>
+          </div>
+
           {/* ── Seção de Mídia ────────────────────────────────────────────── */}
           {kind !== 'none' && (
             <div>
-              {/* Cabeçalho com tipo detectado + formatos aceitos */}
+              {/* Cabeçalho: label reativo ao tipo selecionado */}
               <div className="flex items-baseline justify-between mb-2">
                 <label className="text-xs font-medium text-gray-500">
                   {kind === 'multi'   ? 'Carrossel — slides'
@@ -330,10 +390,12 @@ function EditItemModal({
                   </button>
                 </div>
               ) : (
-                /* Slot único — imagem ou vídeo, conforme o tipo do item */
+                /* Slot único — imagem ou vídeo conforme o tipo selecionado.
+                   singleAccept também detecta vídeo existente no Storage para
+                   retrocompatibilidade com itens salvos com tipo incorreto. */
                 <MediaUploadSlot
-                  accept={MEDIA_ACCEPT[kind]}
-                  acceptHint={MEDIA_ACCEPT_HINT[kind]}
+                  accept={singleAccept}
+                  acceptHint={singleAcceptHint}
                   value={mediaItems[0]?.url ?? ''}
                   onChange={(url) => setMediaItems([{ url, label: '' }])}
                   folder={storageFolder}

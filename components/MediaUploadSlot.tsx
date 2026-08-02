@@ -12,7 +12,7 @@
  *   - app/final/[id]/page.tsx    (edição de item após link gerado)
  */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { isDirectImageUrl } from '@/types/final'
 
 // ─── Helpers de tipo MIME ─────────────────────────────────────────────────────
@@ -74,6 +74,11 @@ export function getStorageContentType(mimeType: string): string {
  *   folder      — pasta no bucket (32 hex chars: storage_folder da review)
  *   slotKey     — identificador único do slot (ex: "0_0", "edit_abc123_1")
  *   label       — texto opcional exibido no estado vazio e no rodapé (ex: "Slide 1")
+ *   initialFile — opcional: arquivo já selecionado (ex: seleção em lote) que o slot
+ *                 deve enviar automaticamente assim que montado/atualizado, sem
+ *                 esperar clique do usuário. Não afeta slots que não recebem essa prop.
+ *   onInitialFileHandled — chamado quando o upload de initialFile termina (sucesso
+ *                 OU erro), para quem orquestra uma fila em lote avançar pro próximo.
  */
 export function MediaUploadSlot({
   accept,
@@ -83,6 +88,8 @@ export function MediaUploadSlot({
   folder,
   slotKey,
   label,
+  initialFile,
+  onInitialFileHandled,
 }: {
   accept:     string
   acceptHint: string
@@ -91,12 +98,15 @@ export function MediaUploadSlot({
   folder:     string
   slotKey:    string
   label?:     string
+  initialFile?: File
+  onInitialFileHandled?: () => void
 }) {
   const [progress,    setProgress]    = useState<number | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [currentFile, setCurrentFile] = useState<{ name: string; size: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const xhrRef   = useRef<XMLHttpRequest | null>(null)
+  const processedInitialFileRef = useRef<File | null>(null)
 
   const handleFile = async (file: File) => {
     setProgress(0)
@@ -200,6 +210,17 @@ export function MediaUploadSlot({
 
     xhrRef.current = null
   }
+
+  // Upload em lote: dispara o envio sozinho quando initialFile chega, sem
+  // esperar clique. Evita reprocessar o mesmo File se o componente re-renderizar.
+  useEffect(() => {
+    if (!initialFile || processedInitialFileRef.current === initialFile) return
+    processedInitialFileRef.current = initialFile
+    handleFile(initialFile).then(() => {
+      onInitialFileHandled?.()
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile])
 
   const handleRemove = () => {
     if (xhrRef.current) { xhrRef.current.abort(); xhrRef.current = null }

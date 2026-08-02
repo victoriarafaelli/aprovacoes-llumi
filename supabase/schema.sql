@@ -80,6 +80,8 @@ alter table contents disable row level security;
 -- alter table contents alter column copy_text drop not null;
 
 -- 3. Atualizar check constraint de tipo
+--    Aplicado via supabase/fix-contents-type-check.sql (ver esse arquivo
+--    para a versão executável e segura, que preserva valores legados).
 -- alter table contents drop constraint if exists contents_type_check;
 -- alter table contents add constraint contents_type_check
 --   check (type in ('post', 'carrossel', 'reels', 'stories',

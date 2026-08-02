@@ -87,6 +87,17 @@ const MODULES: ModuleItem[] = [
 
 function isActive(pathname: string, href: string) {
   if (href === '/') return pathname === '/'
+
+  if (href === '/aprovacoes') {
+    return (
+      pathname === '/aprovacoes' ||
+      pathname === '/criar' ||
+      pathname.startsWith('/planos/') ||
+      pathname === '/final' ||
+      (pathname.startsWith('/final/') && !pathname.startsWith('/final/aprovar/'))
+    )
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

@@ -8,22 +8,29 @@ const PUBLIC_PATH_PREFIXES = [
 ]
 
 function isPublicPath(pathname: string) {
-  // Links usados pelos clientes
   if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return true
   }
 
-  // Arquivos públicos, como ícones e imagens
   return /\.[^/]+$/.test(pathname)
 }
 
-function requestLogin() {
+function requestLogin(request: NextRequest) {
+  const headers: Record<string, string> = {
+    'Cache-Control': 'no-store',
+  }
+
+  // Só abre a janela de login quando a pessoa navega diretamente
+  // para uma página administrativa. Requisições automáticas recebem
+  // apenas o erro 401, sem disparar o pop-up do navegador.
+  if (request.headers.get('sec-fetch-mode') === 'navigate') {
+    headers['WWW-Authenticate'] =
+      'Basic realm="LLUMI Admin", charset="UTF-8"'
+  }
+
   return new NextResponse('Autenticação administrativa necessária.', {
     status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="LLUMI Admin", charset="UTF-8"',
-      'Cache-Control': 'no-store',
-    },
+    headers,
   })
 }
 
@@ -37,7 +44,6 @@ export function middleware(request: NextRequest) {
   const expectedUsername = process.env.ADMIN_USERNAME
   const expectedPassword = process.env.ADMIN_PASSWORD
 
-  // Falha fechada: sem credenciais configuradas, o administrativo não abre.
   if (!expectedUsername || !expectedPassword) {
     return new NextResponse(
       'A autenticação administrativa ainda não foi configurada.',
@@ -51,7 +57,7 @@ export function middleware(request: NextRequest) {
   const authorization = request.headers.get('authorization')
 
   if (!authorization?.startsWith('Basic ')) {
-    return requestLogin()
+    return requestLogin(request)
   }
 
   let decodedCredentials = ''
@@ -59,20 +65,20 @@ export function middleware(request: NextRequest) {
   try {
     decodedCredentials = atob(authorization.slice(6))
   } catch {
-    return requestLogin()
+    return requestLogin(request)
   }
 
   const separatorIndex = decodedCredentials.indexOf(':')
 
   if (separatorIndex === -1) {
-    return requestLogin()
+    return requestLogin(request)
   }
 
   const username = decodedCredentials.slice(0, separatorIndex)
   const password = decodedCredentials.slice(separatorIndex + 1)
 
   if (username !== expectedUsername || password !== expectedPassword) {
-    return requestLogin()
+    return requestLogin(request)
   }
 
   return NextResponse.next()

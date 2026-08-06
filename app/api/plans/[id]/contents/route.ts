@@ -9,9 +9,16 @@ import { ContentFormData } from '@/types'
  * gerado). Preserva share_token, URL e status dos conteúdos antigos.
  *
  * O novo conteúdo sempre entra como approval_status='pending'. Se o
- * planejamento já estava 'completed', ele volta para 'sent' — o guard de
- * finalize (que lê approval_status ao vivo) passa a bloquear a finalização
- * de novo até o cliente revisar o item novo.
+ * planejamento já estava 'completed', adicionar conteúdo exige reabri-lo
+ * (status volta para 'sent') — o guard de finalize (que lê approval_status
+ * ao vivo) passa a bloquear a finalização de novo até o cliente revisar o
+ * item novo.
+ *
+ * Essa reabertura NUNCA é silenciosa: requer `confirm_reopen: true` no
+ * corpo da requisição. Sem essa confirmação explícita, a rota devolve 409
+ * sem inserir nada e sem tocar no status — o admin decide conscientemente
+ * reabrir uma aprovação já finalizada, não é um efeito colateral automático
+ * de adicionar conteúdo.
  *
  * A troca de status acontece ANTES do insert: não há PATCH de status para
  * plans, então se o insert falhasse depois de reabrir, o pior caso é um
@@ -28,7 +35,8 @@ export async function POST(
   const supabase = createServerClient()
 
   const body = await request.json()
-  const content = body as ContentFormData
+  const { confirm_reopen, ...rest } = body as ContentFormData & { confirm_reopen?: boolean }
+  const content = rest
 
   if (!content?.title?.trim()) {
     return NextResponse.json({ error: 'Campo obrigatório: title' }, { status: 400 })
@@ -45,6 +53,18 @@ export async function POST(
 
   if (planError || !plan) {
     return NextResponse.json({ error: 'Planejamento não encontrado' }, { status: 404 })
+  }
+
+  if (plan.status === 'completed' && !confirm_reopen) {
+    return NextResponse.json(
+      {
+        error: 'reopen_required',
+        message:
+          'Este planejamento já foi finalizado. Adicionar um novo conteúdo vai reabri-lo ' +
+          '(volta para "Aguardando") até o cliente revisar o item novo.',
+      },
+      { status: 409 }
+    )
   }
 
   let planStatus = plan.status

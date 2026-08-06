@@ -458,25 +458,37 @@ function AddItemModal({
   const [item, setItem]     = useState<FinalReviewItemFormData>(EMPTY_ITEM())
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [reopenConfirm, setReopenConfirm] = useState<string | null>(null)
 
-  const handleSave = async () => {
-    if (!item.title.trim()) { setSaveError('O título é obrigatório.'); return }
+  const submit = async (confirmReopen: boolean) => {
     setSaving(true)
     setSaveError(null)
     try {
       const res = await fetch(`/api/final-reviews/${reviewId}/items`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(item),
+        body:    JSON.stringify({ ...item, confirm_reopen: confirmReopen }),
       })
       const data = await res.json()
-      if (!res.ok) { setSaveError(data.error || 'Erro ao adicionar conteúdo.'); setSaving(false); return }
+      if (!res.ok) {
+        if (res.status === 409 && data.error === 'reopen_required') {
+          setReopenConfirm(data.message)
+          return
+        }
+        setSaveError(data.error || 'Erro ao adicionar conteúdo.')
+        return
+      }
       onSave(data.item, data.review_status)
     } catch {
       setSaveError('Erro de conexão. Tente novamente.')
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSave = () => {
+    if (!item.title.trim()) { setSaveError('O título é obrigatório.'); return }
+    submit(false)
   }
 
   return (
@@ -491,22 +503,49 @@ function AddItemModal({
           <ItemFormFields item={item} folder={storageFolder} itemKey="new" onChange={setItem} />
 
           {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+
+          {reopenConfirm && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-col gap-1">
+              <p className="text-xs font-semibold text-amber-700">Aprovação já finalizada</p>
+              <p className="text-xs text-amber-700">{reopenConfirm}</p>
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2 sticky bottom-0 bg-white rounded-b-2xl">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white transition-colors"
-          >
-            {saving ? 'Adicionando...' : 'Adicionar conteúdo'}
-          </button>
+          {reopenConfirm ? (
+            <>
+              <button
+                onClick={() => setReopenConfirm(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => submit(true)}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white transition-colors"
+              >
+                {saving ? 'Reabrindo...' : 'Reabrir e adicionar'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white transition-colors"
+              >
+                {saving ? 'Adicionando...' : 'Adicionar conteúdo'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

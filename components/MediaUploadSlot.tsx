@@ -60,6 +60,25 @@ export function getStorageContentType(mimeType: string): string {
   return STORAGE_COMPAT[mimeType] ?? mimeType
 }
 
+/** Limite do bucket "final-reviews" no Supabase Storage — ver supabase/storage-bucket-limit.sql */
+export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+
+/**
+ * Valida tamanho e tipo ANTES de gastar banda com o upload — falha rápido
+ * com mensagem clara, em vez de esperar o servidor/Storage rejeitar depois
+ * de o arquivo inteiro já ter subido.
+ */
+function validateFile(file: File, contentType: string): string | null {
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    const mb = (file.size / 1024 / 1024).toFixed(1)
+    return `Arquivo muito grande (${mb} MB). O limite é 50 MB por arquivo.`
+  }
+  if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) {
+    return `Tipo de arquivo não permitido: "${file.name}". Envie apenas imagens ou vídeos.`
+  }
+  return null
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 /**
@@ -116,6 +135,13 @@ export function MediaUploadSlot({
     const contentType = resolveContentType(file)
     if (!contentType) {
       setUploadError(`Formato não reconhecido: "${file.name}". Use MP4, WebM, MOV, JPG ou PNG.`)
+      setProgress(null)
+      return
+    }
+
+    const validationError = validateFile(file, contentType)
+    if (validationError) {
+      setUploadError(validationError)
       setProgress(null)
       return
     }

@@ -133,9 +133,10 @@ export function MultiSlideFields({
         <button
           type="button"
           onClick={() => multiInputRef.current?.click()}
-          className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
+          disabled={queue.length > 0}
+          className="text-xs text-indigo-500 hover:text-indigo-700 disabled:text-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
         >
-          Selecionar vários arquivos
+          {queue.length > 0 ? 'Enviando arquivos...' : 'Selecionar vários arquivos'}
         </button>
         <input
           ref={multiInputRef}

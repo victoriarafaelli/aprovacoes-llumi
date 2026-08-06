@@ -10,9 +10,12 @@ import { FinalReviewItemFormData } from '@/types/final'
  *
  * Mesma lógica de app/api/plans/[id]/contents/route.ts: o novo item
  * sempre entra como approval_status='pending'; se a review já estava
- * 'completed', ela volta para 'sent' — a troca acontece ANTES do insert
- * pela mesma razão de segurança (evita item pending preso atrás de uma
- * review ainda travada em completed).
+ * 'completed', reabri-la (volta para 'sent') exige `confirm_reopen: true`
+ * no corpo — sem isso a rota devolve 409 sem inserir nada e sem tocar no
+ * status, para o admin confirmar conscientemente que está reabrindo uma
+ * aprovação já finalizada. Quando confirmado, a troca acontece ANTES do
+ * insert pela mesma razão de segurança (evita item pending preso atrás de
+ * uma review ainda travada em completed).
  *
  * Reaproveita o storage_folder já salvo na review para os uploads do novo
  * item (não gera pasta nova). Se a review foi criada sem mídia
@@ -29,7 +32,8 @@ export async function POST(
   const supabase = createServerClient()
 
   const body = await request.json()
-  const item = body as FinalReviewItemFormData
+  const { confirm_reopen, ...rest } = body as FinalReviewItemFormData & { confirm_reopen?: boolean }
+  const item = rest
 
   if (!item?.title?.trim()) {
     return NextResponse.json({ error: 'Campo obrigatório: title' }, { status: 400 })
@@ -46,6 +50,18 @@ export async function POST(
 
   if (reviewError || !review) {
     return NextResponse.json({ error: 'Aprovação não encontrada' }, { status: 404 })
+  }
+
+  if (review.status === 'completed' && !confirm_reopen) {
+    return NextResponse.json(
+      {
+        error: 'reopen_required',
+        message:
+          'Esta aprovação final já foi finalizada. Adicionar um novo conteúdo vai reabri-la ' +
+          '(volta para "Aguardando") até o cliente revisar o item novo.',
+      },
+      { status: 409 }
+    )
   }
 
   let reviewStatus = review.status

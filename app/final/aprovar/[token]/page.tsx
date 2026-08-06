@@ -17,7 +17,6 @@ import {
   CONTENT_TYPE_LABELS,
   NETWORK_LABELS,
 } from '@/types/final'
-import { MarkdownText } from '@/components/MarkdownText'
 
 // ─── Visualizador de mídia ────────────────────────────────────────────────────
 function MediaViewer({ url }: { url: string }) {
@@ -214,7 +213,7 @@ function ApprovalCard({
         {item.caption && (
           <div>
             <p className="text-xs font-medium text-gray-400 mb-1">Legenda</p>
-            <MarkdownText text={item.caption} className="text-sm text-gray-700" />
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.caption}</p>
           </div>
         )}
 
@@ -222,7 +221,7 @@ function ApprovalCard({
         {item.observations && (
           <div className="bg-gray-50 rounded-xl px-4 py-3">
             <p className="text-xs font-medium text-gray-400 mb-1">Observação</p>
-            <MarkdownText text={item.observations} className="text-sm text-gray-600" />
+            <p className="text-sm text-gray-600 whitespace-pre-wrap">{item.observations}</p>
           </div>
         )}
 

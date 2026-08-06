@@ -6,7 +6,6 @@ import Link from 'next/link'
 import {
   Plan,
   Content,
-  ContentFormData,
   SocialNetwork,
   getPlanStats,
   NETWORK_LABELS,
@@ -17,9 +16,6 @@ import {
   formatDate,
   ensureHttps,
 } from '@/types'
-import { MarkdownText } from '@/components/MarkdownText'
-import { MarkdownField } from '@/components/MarkdownField'
-import { ContentFormFields, EMPTY_CONTENT } from '@/components/ContentFormFields'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
 function NetworkBadge({ network }: { network: SocialNetwork }) {
@@ -153,9 +149,9 @@ function EditContentModal({
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 Copy <span className="font-normal text-gray-300">(opcional)</span>
               </label>
-              <MarkdownField
+              <textarea
                 value={copyText}
-                onChange={setCopyText}
+                onChange={(e) => setCopyText(e.target.value)}
                 rows={4}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
               />
@@ -165,9 +161,9 @@ function EditContentModal({
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 Roteiro <span className="font-normal text-gray-300">(opcional)</span>
               </label>
-              <MarkdownField
+              <textarea
                 value={videoScript}
-                onChange={setVideoScript}
+                onChange={(e) => setVideoScript(e.target.value)}
                 rows={4}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
               />
@@ -219,9 +215,9 @@ function EditContentModal({
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Observações <span className="font-normal text-gray-300">(opcional)</span>
             </label>
-            <MarkdownField
+            <textarea
               value={observations}
-              onChange={setObservations}
+              onChange={(e) => setObservations(e.target.value)}
               rows={2}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
             />
@@ -247,117 +243,6 @@ function EditContentModal({
           >
             {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Modal de adicionar conteúdo (pós-link) ──────────────────────────────────
-function AddContentModal({
-  planId,
-  onSave,
-  onClose,
-}: {
-  planId: string
-  onSave: (content: Content, planStatus: Plan['status']) => void
-  onClose: () => void
-}) {
-  const [content, setContent] = useState<ContentFormData>(EMPTY_CONTENT())
-  const [saving, setSaving]   = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [reopenConfirm, setReopenConfirm] = useState<string | null>(null)
-
-  const submit = async (confirmReopen: boolean) => {
-    setSaving(true)
-    setSaveError(null)
-    try {
-      const res = await fetch(`/api/plans/${planId}/contents`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ ...content, confirm_reopen: confirmReopen }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        if (res.status === 409 && data.error === 'reopen_required') {
-          setReopenConfirm(data.message)
-          return
-        }
-        setSaveError(data.error || 'Erro ao adicionar conteúdo.')
-        return
-      }
-      onSave(data.content, data.plan_status)
-    } catch {
-      setSaveError('Erro de conexão. Tente novamente.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSave = () => {
-    if (!content.title.trim()) { setSaveError('O título é obrigatório.'); return }
-    submit(false)
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
-          <h3 className="font-semibold text-gray-900">Adicionar conteúdo</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">×</button>
-        </div>
-
-        <div className="px-5 py-4 flex flex-col gap-4">
-          <ContentFormFields content={content} onChange={setContent} />
-
-          {saveError && (
-            <p className="text-xs text-red-500">{saveError}</p>
-          )}
-
-          {reopenConfirm && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-col gap-1">
-              <p className="text-xs font-semibold text-amber-700">Planejamento já finalizado</p>
-              <p className="text-xs text-amber-700">{reopenConfirm}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-100 flex gap-2 sticky bottom-0 bg-white rounded-b-2xl">
-          {reopenConfirm ? (
-            <>
-              <button
-                onClick={() => setReopenConfirm(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => submit(true)}
-                disabled={saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white transition-colors"
-              >
-                {saving ? 'Reabrindo...' : 'Reabrir e adicionar'}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white transition-colors"
-              >
-                {saving ? 'Adicionando...' : 'Adicionar conteúdo'}
-              </button>
-            </>
-          )}
         </div>
       </div>
     </div>
@@ -456,7 +341,9 @@ function ContentDetailCard({
         {!isVideo && content.copy_text && (
           <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
             <p className="text-xs font-medium text-gray-400 mb-1.5">Copy</p>
-            <MarkdownText text={content.copy_text} className="text-sm text-gray-700 leading-relaxed" />
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {content.copy_text}
+            </p>
           </div>
         )}
 
@@ -473,7 +360,9 @@ function ContentDetailCard({
             {scriptOpen && (
               <div className="mt-2 bg-purple-50 rounded-xl px-4 py-3 border border-purple-100">
                 <p className="text-xs font-medium text-purple-500 mb-1.5">Roteiro</p>
-                <MarkdownText text={content.video_script} className="text-sm text-gray-700 leading-relaxed" />
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {content.video_script}
+                </p>
               </div>
             )}
           </div>
@@ -511,7 +400,9 @@ function ContentDetailCard({
             {obsOpen && (
               <div className="mt-2 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                 <p className="text-xs font-medium text-gray-400 mb-1.5">Observações</p>
-                <MarkdownText text={content.observations} className="text-sm text-gray-500 leading-relaxed" />
+                <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
+                  {content.observations}
+                </p>
               </div>
             )}
           </div>
@@ -563,11 +454,6 @@ export default function PlanoDetailPage() {
 
   const updateContent = useCallback((updated: Content) => {
     setContents((prev) => prev.map((c) => c.id === updated.id ? updated : c))
-  }, [])
-
-  const addContent = useCallback((newContent: Content, planStatus: Plan['status']) => {
-    setContents((prev) => [...prev, newContent])
-    setPlan((prev) => (prev ? { ...prev, status: planStatus } : prev))
   }, [])
 
   const reorderContents = useCallback(async (newOrder: Content[]) => {
@@ -671,7 +557,6 @@ export default function PlanoDetailPage() {
         plan={plan}
         planId={id}
         onUpdateContent={updateContent}
-        onAddContent={addContent}
         onReorder={reorderContents}
       />
     </main>
@@ -686,20 +571,17 @@ function FilteredContentList({
   plan,
   planId,
   onUpdateContent,
-  onAddContent,
   onReorder,
 }: {
   contents: Content[]
   plan: Plan
   planId: string
   onUpdateContent: (updated: Content) => void
-  onAddContent: (content: Content, planStatus: Plan['status']) => void
   onReorder: (newOrder: Content[]) => void
 }) {
   const [filter,     setFilter]     = useState<Filter>('all')
   const [reordering, setReordering] = useState(false)
   const [editing,    setEditing]    = useState<Content | null>(null)
-  const [adding,     setAdding]     = useState(false)
   const [copied,     setCopied]     = useState(false)
 
   const stats = getPlanStats(contents)
@@ -750,12 +632,6 @@ function FilteredContentList({
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all shrink-0"
-        >
-          + Adicionar conteúdo
-        </button>
         {filter === 'all' && (
           <button
             onClick={() => setReordering((v) => !v)}
@@ -829,18 +705,6 @@ function FilteredContentList({
             setEditing(null)
           }}
           onClose={() => setEditing(null)}
-        />
-      )}
-
-      {/* Modal de adicionar conteúdo */}
-      {adding && (
-        <AddContentModal
-          planId={planId}
-          onSave={(content, planStatus) => {
-            onAddContent(content, planStatus)
-            setAdding(false)
-          }}
-          onClose={() => setAdding(false)}
         />
       )}
     </div>

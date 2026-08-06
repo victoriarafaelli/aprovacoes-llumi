@@ -7,6 +7,7 @@ import AppTabs from '@/components/AppTabs'
 import {
   FinalReview,
   FinalReviewItem,
+  FinalReviewItemFormData,
   MediaItem,
   getReviewStats,
   getMediaKind,
@@ -21,9 +22,14 @@ import {
   MEDIA_ACCEPT,
   MEDIA_ACCEPT_HINT,
   EMPTY_MEDIA_ITEM,
+  EMPTY_ITEM,
 } from '@/types/final'
 import type { ContentType } from '@/types/final'
 import { MediaUploadSlot } from '@/components/MediaUploadSlot'
+import { MarkdownText } from '@/components/MarkdownText'
+import { MarkdownField } from '@/components/MarkdownField'
+import { ItemFormFields } from '@/components/ItemFormFields'
+import { MultiSlideFields } from '@/components/MediaUploadFields'
 
 type ReviewStatus = 'draft' | 'sent' | 'completed'
 type FilterTab    = 'all' | 'pending' | 'approved' | 'rejected'
@@ -337,58 +343,15 @@ function EditItemModal({
 
               {isMultiSlot ? (
                 /* Múltiplos slides — carrossel ou stories */
-                <div className="flex flex-col gap-3">
-                  {kind === 'stories' && mediaItems.length > 0 && (
-                    <p className="text-xs text-indigo-500 -mb-1 font-medium">
-                      Cada slide pode ser imagem ou vídeo independentemente.
-                    </p>
-                  )}
-
-                  {mediaItems.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">Nenhum slide ainda. Adicione abaixo.</p>
-                  ) : (
-                    mediaItems.map((mi, slotIdx) => (
-                      <div key={slotIdx}>
-                        <MediaUploadSlot
-                          accept={MEDIA_ACCEPT[kind]}
-                          acceptHint={MEDIA_ACCEPT_HINT[kind]}
-                          value={mi.url}
-                          onChange={(url) =>
-                            setMediaItems((prev) =>
-                              prev.map((m, i) => (i === slotIdx ? { ...m, url } : m))
-                            )
-                          }
-                          folder={storageFolder}
-                          slotKey={`edit_${item.id.replace(/-/g, '')}_${slotIdx}`}
-                          label={
-                            kind === 'stories'
-                              ? `Slide ${slotIdx + 1} · imagem ou vídeo`
-                              : `Slide ${slotIdx + 1}`
-                          }
-                        />
-                        {mediaItems.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMediaItems((prev) => prev.filter((_, i) => i !== slotIdx))
-                            }
-                            className="text-xs text-red-400 hover:text-red-600 transition-colors mt-1 pl-1"
-                          >
-                            Remover slide
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setMediaItems((prev) => [...prev, EMPTY_MEDIA_ITEM()])}
-                    className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors self-start pt-1"
-                  >
-                    + Adicionar slide
-                  </button>
-                </div>
+                <MultiSlideFields
+                  accept={MEDIA_ACCEPT[kind]}
+                  acceptHint={MEDIA_ACCEPT_HINT[kind]}
+                  mediaItems={mediaItems}
+                  onChange={setMediaItems}
+                  folder={storageFolder}
+                  itemIndex={`edit_${item.id.replace(/-/g, '')}`}
+                  hintText={kind === 'stories' ? 'Cada slide pode ser imagem ou vídeo independentemente.' : undefined}
+                />
               ) : (
                 /* Slot único — imagem ou vídeo conforme o tipo selecionado.
                    singleAccept também detecta vídeo existente no Storage para
@@ -410,9 +373,9 @@ function EditItemModal({
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Legenda <span className="font-normal text-gray-300">(opcional)</span>
             </label>
-            <textarea
+            <MarkdownField
               value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={setCaption}
               rows={3}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
             />
@@ -449,9 +412,9 @@ function EditItemModal({
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Observações <span className="font-normal text-gray-300">(opcional)</span>
             </label>
-            <textarea
+            <MarkdownField
               value={observations}
-              onChange={(e) => setObservations(e.target.value)}
+              onChange={setObservations}
               rows={2}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none"
             />
@@ -474,6 +437,115 @@ function EditItemModal({
           >
             {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal de adicionar conteúdo (pós-link) ──────────────────────────────────
+function AddItemModal({
+  reviewId,
+  storageFolder,
+  onSave,
+  onClose,
+}: {
+  reviewId:      string
+  storageFolder: string
+  onSave:        (item: FinalReviewItem, reviewStatus: ReviewStatus) => void
+  onClose:       () => void
+}) {
+  const [item, setItem]     = useState<FinalReviewItemFormData>(EMPTY_ITEM())
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [reopenConfirm, setReopenConfirm] = useState<string | null>(null)
+
+  const submit = async (confirmReopen: boolean) => {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/final-reviews/${reviewId}/items`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ...item, confirm_reopen: confirmReopen }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (res.status === 409 && data.error === 'reopen_required') {
+          setReopenConfirm(data.message)
+          return
+        }
+        setSaveError(data.error || 'Erro ao adicionar conteúdo.')
+        return
+      }
+      onSave(data.item, data.review_status)
+    } catch {
+      setSaveError('Erro de conexão. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSave = () => {
+    if (!item.title.trim()) { setSaveError('O título é obrigatório.'); return }
+    submit(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+          <h3 className="font-semibold text-gray-900">Adicionar conteúdo</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">×</button>
+        </div>
+
+        <div className="px-5 py-4 flex flex-col gap-4">
+          <ItemFormFields item={item} folder={storageFolder} itemKey="new" onChange={setItem} />
+
+          {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+
+          {reopenConfirm && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-col gap-1">
+              <p className="text-xs font-semibold text-amber-700">Aprovação já finalizada</p>
+              <p className="text-xs text-amber-700">{reopenConfirm}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2 sticky bottom-0 bg-white rounded-b-2xl">
+          {reopenConfirm ? (
+            <>
+              <button
+                onClick={() => setReopenConfirm(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => submit(true)}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white transition-colors"
+              >
+                {saving ? 'Reabrindo...' : 'Reabrir e adicionar'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white transition-colors"
+              >
+                {saving ? 'Adicionando...' : 'Adicionar conteúdo'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -569,7 +641,7 @@ function ItemCard({
         {item.caption && (
           <div>
             <p className="text-xs font-medium text-gray-400 mb-1">Legenda</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.caption}</p>
+            <MarkdownText text={item.caption} className="text-sm text-gray-700" />
           </div>
         )}
 
@@ -577,7 +649,7 @@ function ItemCard({
         {item.observations && (
           <div>
             <p className="text-xs font-medium text-gray-400 mb-1">Observações</p>
-            <p className="text-sm text-gray-600 whitespace-pre-wrap">{item.observations}</p>
+            <MarkdownText text={item.observations} className="text-sm text-gray-600" />
           </div>
         )}
 
@@ -651,6 +723,7 @@ export default function FinalDetailPage() {
   const [sendError, setSendError] = useState<string | null>(null)
   const [reordering, setReordering] = useState(false)
   const [editing, setEditing]       = useState<FinalReviewItem | null>(null)
+  const [adding, setAdding]         = useState(false)
 
   useEffect(() => {
     fetch(`/api/final-reviews/${id}`)
@@ -675,6 +748,18 @@ export default function FinalDetailPage() {
       return { ...prev, items: prev.items.map((it) => it.id === updated.id ? updated : it) }
     })
   }, [])
+
+  const addItem = useCallback((newItem: FinalReviewItem, reviewStatus: ReviewStatus) => {
+    setReview((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        status:         reviewStatus,
+        storage_folder: prev.storage_folder ?? id.replace(/-/g, ''),
+        items:          [...prev.items, newItem],
+      }
+    })
+  }, [id])
 
   const moveItem = useCallback(async (items: FinalReviewItem[], from: number, to: number) => {
     const next = [...items]
@@ -792,6 +877,16 @@ export default function FinalDetailPage() {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Adicionar conteúdo — sempre visível, mesmo sem itens ainda */}
+          <div className="mt-4">
+            <button
+              onClick={() => setAdding(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all"
+            >
+              + Adicionar conteúdo
+            </button>
           </div>
 
           {/* Link de compartilhamento */}
@@ -914,6 +1009,19 @@ export default function FinalDetailPage() {
             setEditing(null)
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {/* Modal de adicionar conteúdo */}
+      {adding && (
+        <AddItemModal
+          reviewId={id}
+          storageFolder={review.storage_folder ?? id.replace(/-/g, '')}
+          onSave={(newItem, reviewStatus) => {
+            addItem(newItem, reviewStatus)
+            setAdding(false)
+          }}
+          onClose={() => setAdding(false)}
         />
       )}
     </main>

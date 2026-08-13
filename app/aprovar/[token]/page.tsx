@@ -15,6 +15,7 @@ import {
   formatDate,
   ensureHttps,
 } from '@/types'
+import { MarkdownText } from '@/components/MarkdownText'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
 function NetworkBadge({ network }: { network: SocialNetwork }) {
@@ -137,9 +138,7 @@ function ApprovalCard({
 
         {/* Copy (para formatos não-vídeo) */}
         {!isVideo && content.copy_text && (
-          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {content.copy_text}
-          </p>
+          <MarkdownText text={content.copy_text} className="text-sm text-gray-700 leading-relaxed" />
         )}
 
         {/* Roteiro (para formatos de vídeo) */}
@@ -155,9 +154,7 @@ function ApprovalCard({
             {scriptExpanded && (
               <div className="mt-2 bg-purple-50 rounded-xl px-4 py-3 border border-purple-100">
                 <p className="text-xs font-medium text-purple-500 mb-1.5">Roteiro</p>
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {content.video_script}
-                </p>
+                <MarkdownText text={content.video_script} className="text-sm text-gray-700 leading-relaxed" />
               </div>
             )}
           </div>
@@ -195,9 +192,7 @@ function ApprovalCard({
             {obsExpanded && (
               <div className="mt-2 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                 <p className="text-xs font-medium text-gray-400 mb-1.5">Observações</p>
-                <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
-                  {content.observations}
-                </p>
+                <MarkdownText text={content.observations} className="text-sm text-gray-500 leading-relaxed" />
               </div>
             )}
           </div>

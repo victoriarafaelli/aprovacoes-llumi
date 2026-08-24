@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { v4 as uuidv4 } from 'uuid'
 import { FinalReviewItemFormData } from '@/types/final'
+import { sanitizeFeedCoverUrl } from '@/lib/feed-cover'
 
 // GET /api/final-reviews — Lista todas as aprovações finais
 export async function GET() {
@@ -59,21 +60,29 @@ export async function POST(request: NextRequest) {
 
   if (reviewError) return NextResponse.json({ error: reviewError.message }, { status: 500 })
 
-  const itemsToInsert = items.map((item, index) => ({
-    review_id:       review.id,
-    title:           item.title,
-    social_networks: item.social_networks,
-    type:            item.type,
-    caption:         item.caption      || null,
-    observations:    item.observations || null,
-    publish_date:    item.publish_date || null,
-    publish_time:    item.publish_time || null,
+  const itemsToInsert = items.map((item, index) => {
     // Filtra slots sem URL (usuário não fez upload naquele slide)
-    media_items:     item.media_items.filter((m) => m.url.trim()),
-    approval_status: 'pending' as const,
-    client_feedback: null,
-    order_position:  index,
-  }))
+    const mediaItems = item.media_items.filter((m) => m.url.trim())
+
+    return {
+      review_id:       review.id,
+      title:           item.title,
+      social_networks: item.social_networks,
+      type:            item.type,
+      caption:         item.caption      || null,
+      observations:    item.observations || null,
+      publish_date:    item.publish_date || null,
+      publish_time:    item.publish_time || null,
+      media_items:     mediaItems,
+      // Nunca grava capa órfã (carrossel) ou de origem externa/outro
+      // projeto/bucket/review (vídeo) — ver lib/feed-cover.ts. A pasta é a
+      // mesma storage_folder já validada acima pra esta review inteira.
+      feed_cover_url:  sanitizeFeedCoverUrl(item.type, mediaItems, item.feed_cover_url, storage_folder || null),
+      approval_status: 'pending' as const,
+      client_feedback: null,
+      order_position:  index,
+    }
+  })
 
   const { error: itemsError } = await supabase
     .from('final_review_items')

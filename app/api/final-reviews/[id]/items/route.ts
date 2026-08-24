@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { FinalReviewItemFormData } from '@/types/final'
+import { sanitizeFeedCoverUrl, resolveStorageFolder } from '@/lib/feed-cover'
 
 /**
  * POST /api/final-reviews/[id]/items
@@ -117,6 +118,14 @@ export async function POST(
       publish_date:    item.publish_date || null,
       publish_time:    item.publish_time || null,
       media_items:     mediaItems,
+      // Nunca grava capa órfã (carrossel) ou de origem externa/outro
+      // projeto/bucket/review (vídeo) — ver lib/feed-cover.ts. A pasta vem
+      // do banco (ou do mesmo fallback determinístico que o backfill acima
+      // já usa) — nunca de um valor enviado pelo cliente.
+      feed_cover_url:  sanitizeFeedCoverUrl(
+        item.type, mediaItems, item.feed_cover_url,
+        resolveStorageFolder(id, review.storage_folder)
+      ),
       approval_status: 'pending' as const,
       client_feedback: null,
       order_position:  nextPosition,

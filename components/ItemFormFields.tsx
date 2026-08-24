@@ -21,6 +21,7 @@ import {
 } from '@/types/final'
 import { NetworkSelector } from '@/components/ContentFormFields'
 import { MediaUploadFields } from '@/components/MediaUploadFields'
+import { VideoCoverPicker } from '@/components/VideoCoverPicker'
 import { MarkdownField } from '@/components/MarkdownField'
 
 export function ItemFormFields({
@@ -50,13 +51,17 @@ export function ItemFormFields({
     const newKind       = getMediaKind(newType)
     const newMedia      = newKind === 'none' ? [] : [EMPTY_MEDIA_ITEM()]
 
-    onChange({ ...item, social_networks: newNetworks, type: newType, media_items: newMedia })
+    onChange({
+      ...item, social_networks: newNetworks, type: newType, media_items: newMedia,
+      // Formato mudou → capa antiga (slide/frame) não corresponde mais a nada
+      feed_cover_url: newType === item.type ? item.feed_cover_url : null,
+    })
   }
 
   const handleTypeChange = (type: ContentType) => {
     const newKind  = getMediaKind(type)
     const newMedia = newKind === 'none' ? [] : [EMPTY_MEDIA_ITEM()]
-    onChange({ ...item, type, media_items: newMedia })
+    onChange({ ...item, type, media_items: newMedia, feed_cover_url: null })
   }
 
   return (
@@ -130,7 +135,23 @@ export function ItemFormFields({
             onChange={(items) => onChange({ ...item, media_items: items })}
             folder={folder}
             itemIndex={itemKey}
+            coverUrl={item.feed_cover_url}
+            onCoverChange={(url) => onChange({ ...item, feed_cover_url: url })}
           />
+
+          {/* Capa do feed — só vídeo/reels/shorts (post usa a própria imagem,
+              carrossel escolhe direto no slide via MediaUploadFields acima) */}
+          {kind === 'video' && item.media_items[0]?.url && (
+            <div className="mt-3">
+              <VideoCoverPicker
+                videoUrl={item.media_items[0].url}
+                coverUrl={item.feed_cover_url}
+                onCoverChange={(url) => onChange({ ...item, feed_cover_url: url })}
+                folder={folder}
+                itemIndex={itemKey}
+              />
+            </div>
+          )}
         </div>
       )}
 

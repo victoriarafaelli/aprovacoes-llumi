@@ -16,8 +16,10 @@ import {
   formatDate,
   CONTENT_TYPE_LABELS,
   NETWORK_LABELS,
+  isInFeedGrid,
 } from '@/types/final'
 import { MarkdownText } from '@/components/MarkdownText'
+import { FeedGridPreview } from '@/components/FeedGridPreview'
 
 // ─── Visualizador de mídia ────────────────────────────────────────────────────
 function MediaViewer({ url }: { url: string }) {
@@ -629,25 +631,38 @@ export default function FinalApprovalPage() {
       {/* Itens */}
       <div className="max-w-xl mx-auto px-4 py-6 flex flex-col gap-5">
 
-        {/* Prévia do feed — exibida separada, no topo da lista */}
+        {/* Preview do feed — automático (principal) + imagem manual (opcional/legado).
+            Só representação visual do conjunto — a aprovação continua sendo feita
+            conteúdo por conteúdo, abaixo. */}
+        {review.items.some((i) => isInFeedGrid(i.type)) && (
+          <div className="bg-white border-2 border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b border-gray-50">
+              <p className="text-sm font-semibold text-gray-900">Preview do Feed</p>
+              <p className="text-xs text-gray-400 mt-0.5">Como o perfil vai ficar — mais recente primeiro</p>
+            </div>
+            <div className="px-5 py-4">
+              <FeedGridPreview items={review.items} />
+            </div>
+          </div>
+        )}
+
         {hasFeedPreview && (
-          <>
-            <FeedPreviewCard
-              imageUrl={review.feed_preview_url!}
-              status={feedStatus}
-              feedback={feedFeedback}
-              isCompleted={isCompleted}
-              onStatusChange={handleFeedPreviewStatus}
-              onFeedbackChange={handleFeedPreviewFeedback}
-            />
-            {review.items.length > 0 && (
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-100" />
-                <span className="text-xs text-gray-300 font-medium whitespace-nowrap">Conteúdos individuais</span>
-                <div className="flex-1 h-px bg-gray-100" />
-              </div>
-            )}
-          </>
+          <FeedPreviewCard
+            imageUrl={review.feed_preview_url!}
+            status={feedStatus}
+            feedback={feedFeedback}
+            isCompleted={isCompleted}
+            onStatusChange={handleFeedPreviewStatus}
+            onFeedbackChange={handleFeedPreviewFeedback}
+          />
+        )}
+
+        {(review.items.some((i) => isInFeedGrid(i.type)) || hasFeedPreview) && review.items.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-gray-300 font-medium whitespace-nowrap">Conteúdos individuais</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
         )}
 
         {review.items.map((item) => (

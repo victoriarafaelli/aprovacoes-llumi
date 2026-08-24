@@ -109,6 +109,12 @@ export interface FinalReviewItem {
   client_feedback: string | null // comentário do cliente
   order_position: number
   created_at: string
+  // ── Preview automático do feed ──────────────────────────────────────────────
+  // Capa manual opcional: carrossel → aponta pro slide escolhido (null = 1º
+  // slide); vídeo/reels/shorts → capa enviada ou frame capturado (null =
+  // sem capa, mostra placeholder). Post usa sempre a própria imagem — este
+  // campo fica null e não é usado nesse caso.
+  feed_cover_url: string | null
 }
 
 // ─── Formulário de criação ────────────────────────────────────────────────────
@@ -122,6 +128,7 @@ export interface FinalReviewItemFormData {
   publish_date: string
   publish_time: string
   media_items: MediaItem[]
+  feed_cover_url: string | null
 }
 
 export const EMPTY_MEDIA_ITEM = (): MediaItem => ({ url: '', label: '' })
@@ -135,7 +142,38 @@ export const EMPTY_ITEM = (): FinalReviewItemFormData => ({
   publish_date:    '',
   publish_time:    '',
   media_items:     [EMPTY_MEDIA_ITEM()],
+  feed_cover_url:  null,
 })
+
+/** Grid do feed inclui só formatos que aparecem na grade do perfil do
+ *  Instagram — stories e artigo (LinkedIn) ficam de fora. */
+export const FEED_GRID_FORMATS: ContentType[] = ['post', 'carrossel', 'reels', 'video', 'shorts']
+
+export function isInFeedGrid(type: ContentType): boolean {
+  return FEED_GRID_FORMATS.includes(type)
+}
+
+/**
+ * Resolve a URL de capa de um item para o grid do feed, com fallback
+ * automático se a capa escolhida não existir mais entre media_items
+ * (carrossel) — nunca retorna uma URL órfã.
+ */
+export function resolveFeedCoverUrl(item: Pick<FinalReviewItem, 'type' | 'media_items' | 'feed_cover_url'>): string | null {
+  const kind = getMediaKind(item.type)
+  const urls = (item.media_items ?? []).map((m) => m.url).filter(Boolean)
+
+  if (kind === 'image') {
+    return urls[0] ?? null
+  }
+  if (kind === 'multi') {
+    if (item.feed_cover_url && urls.includes(item.feed_cover_url)) return item.feed_cover_url
+    return urls[0] ?? null
+  }
+  if (kind === 'video') {
+    return item.feed_cover_url ?? null
+  }
+  return null
+}
 
 // ─── Helpers de stats ─────────────────────────────────────────────────────────
 

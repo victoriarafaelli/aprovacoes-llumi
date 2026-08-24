@@ -23,6 +23,7 @@ import {
   MEDIA_ACCEPT_HINT,
   EMPTY_MEDIA_ITEM,
   EMPTY_ITEM,
+  isInFeedGrid,
 } from '@/types/final'
 import type { ContentType } from '@/types/final'
 import { MediaUploadSlot } from '@/components/MediaUploadSlot'
@@ -30,6 +31,8 @@ import { MarkdownText } from '@/components/MarkdownText'
 import { MarkdownField } from '@/components/MarkdownField'
 import { ItemFormFields } from '@/components/ItemFormFields'
 import { MultiSlideFields } from '@/components/MediaUploadFields'
+import { VideoCoverPicker } from '@/components/VideoCoverPicker'
+import { FeedGridPreview } from '@/components/FeedGridPreview'
 
 type ReviewStatus = 'draft' | 'sent' | 'completed'
 type FilterTab    = 'all' | 'pending' | 'approved' | 'rejected'
@@ -194,6 +197,7 @@ function EditItemModal({
   const [observations, setObservations] = useState(item.observations ?? '')
   const [publishDate,  setPublishDate]  = useState(item.publish_date ?? '')
   const [publishTime,  setPublishTime]  = useState(item.publish_time ?? '')
+  const [feedCoverUrl, setFeedCoverUrl] = useState<string | null>(item.feed_cover_url ?? null)
   const [saving,       setSaving]       = useState(false)
   const [saveError,    setSaveError]    = useState<string | null>(null)
 
@@ -227,6 +231,9 @@ function EditItemModal({
       // Continuou sendo single mas não tinha slot — garante um
       setMediaItems([EMPTY_MEDIA_ITEM()])
     }
+    // Formato mudou → a capa antiga (slide escolhido/frame de vídeo) não
+    // corresponde mais a nada nesse novo formato.
+    if (newKind !== kind) setFeedCoverUrl(null)
     setSelectedType(newType)
   }
 
@@ -253,17 +260,33 @@ function EditItemModal({
       const newUrls      = new Set(mediaToSave.map((m) => m.url).filter(Boolean))
       const urlsToDelete = oldUrls.filter((url) => !newUrls.has(url))
 
+      // Trava de segurança: nunca deixa feed_cover_url órfã. Se o carrossel
+      // não tem mais a URL escolhida como capa entre os slides atuais, cai
+      // pro padrão (null = primeiro slide) automaticamente.
+      const coverToSave =
+        kind === 'multi' && feedCoverUrl && !newUrls.has(feedCoverUrl)
+          ? null
+          : feedCoverUrl
+
+      // No carrossel a capa só aponta pra um slide (já coberto acima). No
+      // vídeo é um arquivo próprio, separado — se foi trocada/removida, o
+      // arquivo antigo precisa ser limpo do Storage como qualquer outra mídia.
+      if (kind === 'video' && item.feed_cover_url && item.feed_cover_url !== coverToSave) {
+        urlsToDelete.push(item.feed_cover_url)
+      }
+
       const res = await fetch(`/api/final-reviews/${reviewId}/items/${item.id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          title:        title.trim(),
-          type:         selectedType,        // ← salva o tipo corrigido
-          caption:      caption      || null,
-          observations: observations || null,
-          publish_date: publishDate  || null,
-          publish_time: publishTime  || null,
-          media_items:  mediaToSave,
+          title:          title.trim(),
+          type:           selectedType,        // ← salva o tipo corrigido
+          caption:        caption      || null,
+          observations:   observations || null,
+          publish_date:   publishDate  || null,
+          publish_time:   publishTime  || null,
+          media_items:    mediaToSave,
+          feed_cover_url: coverToSave,
         }),
       })
       const data = await res.json()
@@ -273,7 +296,7 @@ function EditItemModal({
         fetch('/api/final-reviews/delete-media', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ urls: urlsToDelete }),
+          body:    JSON.stringify({ review_id: reviewId, urls: urlsToDelete }),
         }).catch(() => { /* silencioso */ })
       }
 
@@ -342,7 +365,9 @@ function EditItemModal({
               </div>
 
               {isMultiSlot ? (
-                /* Múltiplos slides — carrossel ou stories */
+                /* Múltiplos slides — carrossel ou stories.
+                   Capa do feed só faz sentido pro carrossel (kind='multi') —
+                   stories não entra na grade do Instagram. */
                 <MultiSlideFields
                   accept={MEDIA_ACCEPT[kind]}
                   acceptHint={MEDIA_ACCEPT_HINT[kind]}
@@ -351,6 +376,8 @@ function EditItemModal({
                   folder={storageFolder}
                   itemIndex={`edit_${item.id.replace(/-/g, '')}`}
                   hintText={kind === 'stories' ? 'Cada slide pode ser imagem ou vídeo independentemente.' : undefined}
+                  coverUrl={kind === 'multi' ? feedCoverUrl : undefined}
+                  onCoverChange={kind === 'multi' ? setFeedCoverUrl : undefined}
                 />
               ) : (
                 /* Slot único — imagem ou vídeo conforme o tipo selecionado.
@@ -364,6 +391,20 @@ function EditItemModal({
                   folder={storageFolder}
                   slotKey={`edit_${item.id.replace(/-/g, '')}_0`}
                 />
+              )}
+
+              {/* Capa do feed — só vídeo (post usa a própria imagem, carrossel
+                  escolhe no slide acima) */}
+              {kind === 'video' && mediaItems[0]?.url && (
+                <div className="mt-3">
+                  <VideoCoverPicker
+                    videoUrl={mediaItems[0].url}
+                    coverUrl={feedCoverUrl}
+                    onCoverChange={setFeedCoverUrl}
+                    folder={storageFolder}
+                    itemIndex={`edit_${item.id.replace(/-/g, '')}`}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -665,7 +706,28 @@ function ItemCard({
   )
 }
 
-// ─── Card de prévia do feed (read-only, visão do gerente) ────────────────────
+// ─── Preview automático do feed (principal) ──────────────────────────────────
+// Montado a partir das capas dos próprios conteúdos — sem upload manual.
+// Puramente visual: sem aprovar/reprovar/comentar aqui.
+function AutoFeedPreviewCard({ items }: { items: FinalReviewItem[] }) {
+  if (!items.some((i) => isInFeedGrid(i.type))) return null
+
+  return (
+    <div className="bg-white border-2 border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-50">
+        <p className="text-sm font-semibold text-gray-900">Preview do Feed</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Como as capas vão aparecer no perfil — mais recente primeiro
+        </p>
+      </div>
+      <div className="px-5 py-4">
+        <FeedGridPreview items={items} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Imagem de referência do feed (manual, opcional/secundária) ──────────────
 function FeedPreviewManagerCard({ review }: { review: FinalReview }) {
   if (!review.feed_preview_url) return null
 
@@ -687,8 +749,8 @@ function FeedPreviewManagerCard({ review }: { review: FinalReview }) {
     <div className={`bg-white border-2 rounded-2xl shadow-sm overflow-hidden ${border}`}>
       <div className="px-5 pt-4 pb-3 border-b border-gray-50 flex items-center justify-between">
         <div>
-          <p className="text-sm font-semibold text-gray-900">Prévia do Feed</p>
-          <p className="text-xs text-gray-400 mt-0.5">Como o perfil vai ficar após as publicações</p>
+          <p className="text-sm font-semibold text-gray-900">Imagem de referência do feed</p>
+          <p className="text-xs text-gray-400 mt-0.5">Upload manual (opcional) — mantido para compatibilidade</p>
         </div>
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>
       </div>
@@ -962,10 +1024,13 @@ export default function FinalDetailPage() {
 
       {/* Itens */}
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4">
-        {/* Prévia do feed — sempre visível no topo, fora do filtro */}
+        {/* Preview do feed — sempre visível no topo, fora do filtro.
+            Automático (principal) primeiro, imagem manual (opcional/legado) depois. */}
+        {filter === 'all' && <AutoFeedPreviewCard items={review.items} />}
         {filter === 'all' && <FeedPreviewManagerCard review={review} />}
 
-        {review.feed_preview_url && filter === 'all' && review.items.length > 0 && (
+        {filter === 'all' && review.items.length > 0 &&
+         (review.items.some((i) => isInFeedGrid(i.type)) || review.feed_preview_url) && (
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-gray-100" />
             <span className="text-xs text-gray-300 font-medium whitespace-nowrap">Conteúdos individuais</span>

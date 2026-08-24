@@ -31,6 +31,8 @@ export function MultiSlideFields({
   folder,
   itemIndex,
   hintText,
+  coverUrl,
+  onCoverChange,
 }: {
   accept: string
   acceptHint: string
@@ -39,6 +41,10 @@ export function MultiSlideFields({
   folder: string
   itemIndex: number | string
   hintText?: string
+  /** Se fornecido junto com onCoverChange, mostra "Usar como capa do feed"
+   *  em cada slide (usado só no carrossel, para o Preview Automático). */
+  coverUrl?: string | null
+  onCoverChange?: (url: string | null) => void
 }) {
   // Fila de upload em lote: slots aguardando envio, na ordem selecionada.
   // Só o item na cabeça da fila (queue[0]) recebe initialFile — upload
@@ -70,7 +76,14 @@ export function MultiSlideFields({
       {hintText && (
         <p className="text-xs text-gray-400 -mb-1">{hintText}</p>
       )}
-      {mediaItems.map((item, slotIdx) => (
+      {mediaItems.map((item, slotIdx) => {
+        // Capa efetiva: a escolhida explicitamente, ou o 1º slide por padrão
+        // (mesma regra de fallback usada em resolveFeedCoverUrl).
+        const isEffectiveCover = onCoverChange
+          ? (coverUrl ? coverUrl === item.url : slotIdx === 0)
+          : false
+
+        return (
         <div key={slotIdx} className="flex items-start gap-1.5">
           <div className="flex-1 min-w-0">
             <MediaUploadSlot
@@ -79,6 +92,10 @@ export function MultiSlideFields({
               value={item.url}
               onChange={(url) => {
                 onChange(mediaItems.map((m, i) => i === slotIdx ? { ...m, url } : m))
+                // Slide substituído era a capa escolhida → capa segue o mesmo slide (nova URL)
+                if (onCoverChange && coverUrl && coverUrl === item.url && url) {
+                  onCoverChange(url)
+                }
               }}
               folder={folder}
               slotKey={`${itemIndex}_${slotIdx}`}
@@ -86,15 +103,38 @@ export function MultiSlideFields({
               initialFile={queue[0]?.slotIdx === slotIdx ? queue[0].file : undefined}
               onInitialFileHandled={() => setQueue((prev) => prev.slice(1))}
             />
-            {mediaItems.length > 1 && (
-              <button
-                type="button"
-                onClick={() => onChange(mediaItems.filter((_, i) => i !== slotIdx))}
-                className="text-xs text-red-400 hover:text-red-600 transition-colors mt-1 pl-1"
-              >
-                Remover slide
-              </button>
-            )}
+            <div className="flex items-center gap-3 mt-1 pl-1">
+              {mediaItems.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(mediaItems.filter((_, i) => i !== slotIdx))
+                    // Removeu o slide que era a capa → volta pro padrão (1º slide disponível)
+                    if (onCoverChange && coverUrl && coverUrl === item.url) {
+                      onCoverChange(null)
+                    }
+                  }}
+                  className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                >
+                  Remover slide
+                </button>
+              )}
+              {onCoverChange && item.url && (
+                isEffectiveCover ? (
+                  <span className="text-xs text-indigo-600 font-medium flex items-center gap-1">
+                    ★ Capa do feed
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onCoverChange(item.url)}
+                    className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+                  >
+                    Usar como capa do feed
+                  </button>
+                )
+              )}
+            </div>
           </div>
           {mediaItems.length > 1 && (
             <div className="flex flex-col shrink-0 pt-1">
@@ -119,7 +159,8 @@ export function MultiSlideFields({
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
 
       <div className="flex items-center gap-3">
         <button
@@ -162,12 +203,17 @@ export function MediaUploadFields({
   onChange,
   folder,
   itemIndex,
+  coverUrl,
+  onCoverChange,
 }: {
   kind: MediaKind
   mediaItems: MediaItem[]
   onChange: (items: MediaItem[]) => void
   folder: string
   itemIndex: number | string
+  /** Só usado no carrossel (kind='multi') — escolha de capa do feed. */
+  coverUrl?: string | null
+  onCoverChange?: (url: string | null) => void
 }) {
   if (kind === 'none') return null
 
@@ -213,6 +259,8 @@ export function MediaUploadFields({
       onChange={onChange}
       folder={folder}
       itemIndex={itemIndex}
+      coverUrl={coverUrl}
+      onCoverChange={onCoverChange}
     />
   )
 }

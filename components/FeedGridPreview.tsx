@@ -15,11 +15,25 @@
  *  - só usa imagens (nunca <video>), pra não pesar o carregamento;
  *  - conteúdo sem capa disponível → placeholder discreto com o título,
  *    não quebra o grid.
+ *
+ * Também usado (mesmo componente, sem duplicar lógica) na tela de criação
+ * (/final/criar), direto sobre o estado do formulário — por isso aceita a
+ * forma mínima `FeedGridPreviewItem` abaixo, e não só `FinalReviewItem`.
  */
 
 import { FinalReviewItem, getMediaKind, isInFeedGrid, resolveFeedCoverUrl } from '@/types/final'
 
-function GridCell({ item }: { item: FinalReviewItem }) {
+/**
+ * Forma mínima aceita pelo grid. `FinalReviewItem` (telas já publicadas) e
+ * `FinalReviewItemFormData` (formulário de criação, sem `id`/`order_position`
+ * ainda) satisfazem essa forma estruturalmente.
+ */
+export type FeedGridPreviewItem = Pick<FinalReviewItem, 'type' | 'media_items' | 'feed_cover_url' | 'title'> & {
+  id?: string
+  order_position?: number
+}
+
+function GridCell({ item }: { item: FeedGridPreviewItem }) {
   const kind      = getMediaKind(item.type)
   const coverUrl  = resolveFeedCoverUrl(item)
   const isMulti   = kind === 'multi'
@@ -65,18 +79,20 @@ function GridCell({ item }: { item: FinalReviewItem }) {
   )
 }
 
-export function FeedGridPreview({ items }: { items: FinalReviewItem[] }) {
+export function FeedGridPreview({ items }: { items: FeedGridPreviewItem[] }) {
+  // order_position ausente (formulário de criação, ainda não salvo) → a
+  // posição no array já É a ordem operacional, então ela serve de fallback.
   const gridItems = items
-    .filter((i) => isInFeedGrid(i.type))
-    .slice()
-    .sort((a, b) => b.order_position - a.order_position) // mais recente primeiro
+    .map((item, idx) => ({ item, order: item.order_position ?? idx, key: item.id ?? `idx-${idx}` }))
+    .filter(({ item }) => isInFeedGrid(item.type))
+    .sort((a, b) => b.order - a.order) // mais recente primeiro
 
   if (gridItems.length === 0) return null
 
   return (
     <div className="grid grid-cols-3 gap-1 sm:gap-1.5 w-full max-w-[420px]">
-      {gridItems.map((item) => (
-        <GridCell key={item.id} item={item} />
+      {gridItems.map(({ item, key }) => (
+        <GridCell key={key} item={item} />
       ))}
     </div>
   )

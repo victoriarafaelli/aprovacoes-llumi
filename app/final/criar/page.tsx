@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { FinalReviewItemFormData, EMPTY_ITEM, getMediaKind } from '@/types/final'
+import { FinalReviewItemFormData, EMPTY_ITEM, getMediaKind, isInFeedGrid } from '@/types/final'
 import { ItemFormFields } from '@/components/ItemFormFields'
+import { FeedGridPreview } from '@/components/FeedGridPreview'
 
 // ─── Card de item ─────────────────────────────────────────────────────────────
 function ItemCard({
@@ -63,6 +64,25 @@ function ItemCard({
 
       <div className="px-5 py-4 flex flex-col gap-4">
         <ItemFormFields item={item} folder={folder} itemKey={index} onChange={onChange} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Prévia de Feed (ao vivo, direto do estado do formulário) ─────────────────
+// Mesmo título/subtítulo/visual já publicado em /final/[id] e
+// /final/aprovar/[token] — só antecipa a mesma experiência para a criação,
+// sem chamar API nem salvar nada: reage a qualquer mudança em `items`.
+function LiveFeedPreviewCard({ items }: { items: FinalReviewItemFormData[] }) {
+  if (!items.some((i) => isInFeedGrid(i.type))) return null
+  return (
+    <div className="bg-white border-2 border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-gray-50">
+        <p className="text-sm font-semibold text-gray-900">Prévia de Feed</p>
+        <p className="text-xs text-gray-400 mt-0.5">Confira como ficará o feed deste mês 🩶</p>
+      </div>
+      <div className="px-5 py-4 flex justify-center">
+        <FeedGridPreview items={items} />
       </div>
     </div>
   )
@@ -187,81 +207,98 @@ export default function FinalCriarPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+        <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
           <Link href="/final" className="text-gray-400 hover:text-gray-600 transition-colors text-lg">←</Link>
           <h1 className="text-lg font-bold text-gray-900">Nova aprovação final</h1>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
-        {/* Dados do cliente */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm flex flex-col gap-4">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Informações</h2>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Nome do cliente</label>
-            <input
-              type="text"
-              placeholder='Ex: "Clínica Bella Vita"'
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-            />
+      {/* Desktop: formulário à esquerda (~2/3) + Prévia de Feed fixa à direita
+          (~1/3). Mobile/tablet: uma coluna só, com a prévia entre Informações
+          e Conteúdos (ver LiveFeedPreviewCard "lg:hidden" abaixo). */}
+      <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 py-6 lg:grid lg:grid-cols-[2fr_1fr] lg:gap-6 lg:items-start">
+        <div className="flex flex-col gap-5">
+          {/* Dados do cliente */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm flex flex-col gap-4">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Informações</h2>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Nome do cliente</label>
+              <input
+                type="text"
+                placeholder='Ex: "Clínica Bella Vita"'
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Mês de referência</label>
+              <input
+                type="text"
+                placeholder='Ex: "Maio 2026"'
+                value={monthRef}
+                onChange={(e) => setMonthRef(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Mês de referência</label>
-            <input
-              type="text"
-              placeholder='Ex: "Maio 2026"'
-              value={monthRef}
-              onChange={(e) => setMonthRef(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-            />
+
+          {/* Prévia de Feed — só em mobile/tablet, entre Informações e Conteúdos.
+              Em desktop ela vive na aside sticky ao lado (mesmo componente). */}
+          <div className="lg:hidden">
+            <LiveFeedPreviewCard items={items} />
           </div>
+
+          {/* Conteúdos */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">
+              Conteúdos <span className="text-gray-400 font-normal">({items.length})</span>
+            </h2>
+          </div>
+
+          {items.map((item, index) => (
+            <ItemCard
+              key={index}
+              index={index}
+              total={items.length}
+              item={item}
+              folder={uploadSession}
+              onChange={(data) => updateItem(index, data)}
+              onRemove={() => removeItem(index)}
+              onMoveUp={() => moveItem(index, index - 1)}
+              onMoveDown={() => moveItem(index, index + 1)}
+            />
+          ))}
+
+          <button
+            onClick={addItem}
+            className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-2xl py-4 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+          >
+            + Adicionar conteúdo
+          </button>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl text-sm transition-colors"
+          >
+            {isSubmitting ? 'Criando aprovação...' : 'Gerar link de aprovação final'}
+          </button>
+
+          <div className="h-6" />
         </div>
 
-        {/* Conteúdos */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">
-            Conteúdos <span className="text-gray-400 font-normal">({items.length})</span>
-          </h2>
-        </div>
-
-        {items.map((item, index) => (
-          <ItemCard
-            key={index}
-            index={index}
-            total={items.length}
-            item={item}
-            folder={uploadSession}
-            onChange={(data) => updateItem(index, data)}
-            onRemove={() => removeItem(index)}
-            onMoveUp={() => moveItem(index, index - 1)}
-            onMoveDown={() => moveItem(index, index + 1)}
-          />
-        ))}
-
-        <button
-          onClick={addItem}
-          className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-2xl py-4 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
-        >
-          + Adicionar conteúdo
-        </button>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl text-sm transition-colors"
-        >
-          {isSubmitting ? 'Criando aprovação...' : 'Gerar link de aprovação final'}
-        </button>
-
-        <div className="h-6" />
+        {/* Prévia de Feed — desktop, coluna fixa e sticky (não sobrepõe: fica
+            abaixo do header sticky e some em telas menores que lg). */}
+        <aside className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
+          <LiveFeedPreviewCard items={items} />
+        </aside>
       </div>
     </main>
   )

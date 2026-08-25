@@ -42,7 +42,7 @@ export function MultiSlideFields({
   itemIndex: number | string
   hintText?: string
   /** Se fornecido junto com onCoverChange, mostra "Usar como capa do feed"
-   *  em cada slide (usado só no carrossel, para o Preview Automático). */
+   *  em cada slide (usado só no carrossel, para a Prévia de Feed). */
   coverUrl?: string | null
   onCoverChange?: (url: string | null) => void
 }) {

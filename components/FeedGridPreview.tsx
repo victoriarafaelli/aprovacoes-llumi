@@ -26,7 +26,7 @@ function GridCell({ item }: { item: FinalReviewItem }) {
   const isVideo   = kind === 'video'
 
   return (
-    <div className="aspect-square relative overflow-hidden rounded-md sm:rounded-lg bg-gray-100 border border-gray-100">
+    <div className="aspect-[4/5] relative overflow-hidden rounded-md sm:rounded-lg bg-gray-100 border border-gray-100">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -74,7 +74,7 @@ export function FeedGridPreview({ items }: { items: FinalReviewItem[] }) {
   if (gridItems.length === 0) return null
 
   return (
-    <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
+    <div className="grid grid-cols-3 gap-1 sm:gap-1.5 w-full max-w-[420px]">
       {gridItems.map((item) => (
         <GridCell key={item.id} item={item} />
       ))}

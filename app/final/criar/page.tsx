@@ -4,7 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { FinalReviewItemFormData, EMPTY_ITEM, getMediaKind } from '@/types/final'
 import { ItemFormFields } from '@/components/ItemFormFields'
-import { MediaUploadSlot } from '@/components/MediaUploadSlot'
 
 // ─── Card de item ─────────────────────────────────────────────────────────────
 function ItemCard({
@@ -80,7 +79,6 @@ export default function FinalCriarPage() {
 
   const [clientName,      setClientName]      = useState('')
   const [monthRef,        setMonthRef]        = useState('')
-  const [feedPreviewUrl,  setFeedPreviewUrl]  = useState<string>('')
   const [items,           setItems]           = useState<FinalReviewItemFormData[]>([EMPTY_ITEM()])
   const [isSubmitting,    setIsSubmitting]    = useState(false)
   const [shareLink,       setShareLink]       = useState<string | null>(null)
@@ -125,10 +123,9 @@ export default function FinalCriarPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          client_name:      clientName.trim(),
-          month_reference:  monthRef.trim(),
-          storage_folder:   uploadSession,
-          feed_preview_url: feedPreviewUrl || null,
+          client_name:     clientName.trim(),
+          month_reference: monthRef.trim(),
+          storage_folder:  uploadSession,
           items,
         }),
       })
@@ -249,32 +246,6 @@ export default function FinalCriarPage() {
         >
           + Adicionar conteúdo
         </button>
-
-        {/* ── Prévia do Feed ────────────────────────────────────────────────── */}
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 pt-4 pb-3 border-b border-gray-50">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                Prévia do Feed
-              </span>
-              <span className="text-xs text-gray-300 font-normal">(opcional)</span>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Mostre ao cliente como a grade do perfil vai ficar após as publicações.
-              Será exibida como um item separado de aprovação no link do cliente.
-            </p>
-          </div>
-          <div className="px-5 py-4">
-            <MediaUploadSlot
-              accept="image/*"
-              acceptHint="JPG, PNG, WebP · Recomendado 1080×1080"
-              value={feedPreviewUrl}
-              onChange={setFeedPreviewUrl}
-              folder={uploadSession}
-              slotKey="feed_preview"
-            />
-          </div>
-        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">

@@ -706,8 +706,8 @@ function ItemCard({
   )
 }
 
-// ─── Preview automático do feed (principal) ──────────────────────────────────
-// Montado a partir das capas dos próprios conteúdos — sem upload manual.
+// ─── Prévia de Feed (automática, principal) ──────────────────────────────────
+// Montada a partir das capas dos próprios conteúdos — sem upload manual.
 // Puramente visual: sem aprovar/reprovar/comentar aqui.
 function AutoFeedPreviewCard({ items }: { items: FinalReviewItem[] }) {
   if (!items.some((i) => isInFeedGrid(i.type))) return null
@@ -715,60 +715,11 @@ function AutoFeedPreviewCard({ items }: { items: FinalReviewItem[] }) {
   return (
     <div className="bg-white border-2 border-gray-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-gray-50">
-        <p className="text-sm font-semibold text-gray-900">Preview do Feed</p>
-        <p className="text-xs text-gray-400 mt-0.5">
-          Como as capas vão aparecer no perfil — mais recente primeiro
-        </p>
+        <p className="text-sm font-semibold text-gray-900">Prévia de Feed</p>
+        <p className="text-xs text-gray-400 mt-0.5">Confira como ficará o feed deste mês 🩶</p>
       </div>
-      <div className="px-5 py-4">
+      <div className="px-5 py-4 flex justify-center">
         <FeedGridPreview items={items} />
-      </div>
-    </div>
-  )
-}
-
-// ─── Imagem de referência do feed (manual, opcional/secundária) ──────────────
-function FeedPreviewManagerCard({ review }: { review: FinalReview }) {
-  if (!review.feed_preview_url) return null
-
-  const statusMap = {
-    pending:  { label: 'Pendente',  cls: 'bg-gray-100 text-gray-500' },
-    approved: { label: 'Aprovado',  cls: 'bg-green-100 text-green-700' },
-    rejected: { label: 'Reprovado', cls: 'bg-red-100 text-red-600' },
-  }
-  const { label, cls } = statusMap[review.feed_preview_status ?? 'pending']
-
-  const borderMap = {
-    pending:  'border-gray-100',
-    approved: 'border-green-200',
-    rejected: 'border-red-200',
-  }
-  const border = borderMap[review.feed_preview_status ?? 'pending']
-
-  return (
-    <div className={`bg-white border-2 rounded-2xl shadow-sm overflow-hidden ${border}`}>
-      <div className="px-5 pt-4 pb-3 border-b border-gray-50 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Imagem de referência do feed</p>
-          <p className="text-xs text-gray-400 mt-0.5">Upload manual (opcional) — mantido para compatibilidade</p>
-        </div>
-        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>
-      </div>
-      <div className="px-5 py-4 flex flex-col gap-4">
-        <div className="w-full rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={review.feed_preview_url}
-            alt="Prévia do feed"
-            className="w-full object-contain max-h-[480px]"
-          />
-        </div>
-        {review.feed_preview_feedback && (
-          <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-            <p className="text-xs font-semibold text-amber-700 mb-1">Feedback do cliente</p>
-            <p className="text-sm text-amber-800 whitespace-pre-wrap">{review.feed_preview_feedback}</p>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -1024,13 +975,12 @@ export default function FinalDetailPage() {
 
       {/* Itens */}
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4">
-        {/* Preview do feed — sempre visível no topo, fora do filtro.
-            Automático (principal) primeiro, imagem manual (opcional/legado) depois. */}
+        {/* Prévia de Feed — única visualização de conjunto, sempre visível no
+            topo, fora do filtro. */}
         {filter === 'all' && <AutoFeedPreviewCard items={review.items} />}
-        {filter === 'all' && <FeedPreviewManagerCard review={review} />}
 
         {filter === 'all' && review.items.length > 0 &&
-         (review.items.some((i) => isInFeedGrid(i.type)) || review.feed_preview_url) && (
+         review.items.some((i) => isInFeedGrid(i.type)) && (
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-gray-100" />
             <span className="text-xs text-gray-300 font-medium whitespace-nowrap">Conteúdos individuais</span>

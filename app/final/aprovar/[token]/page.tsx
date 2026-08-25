@@ -287,140 +287,6 @@ function ApprovalCard({
   )
 }
 
-// ─── Card de prévia do feed ───────────────────────────────────────────────────
-function FeedPreviewCard({
-  imageUrl,
-  status,
-  feedback,
-  isCompleted,
-  onStatusChange,
-  onFeedbackChange,
-}: {
-  imageUrl: string
-  status: ApprovalStatus
-  feedback: string
-  isCompleted: boolean
-  onStatusChange: (status: ApprovalStatus) => Promise<void>
-  onFeedbackChange: (feedback: string) => Promise<void>
-}) {
-  const [localStatus,   setLocalStatus]   = useState<ApprovalStatus>(status)
-  const [localFeedback, setLocalFeedback] = useState(feedback)
-  const [savingStatus,  setSavingStatus]  = useState(false)
-  const [savingFb,      setSavingFb]      = useState(false)
-  const [fbSaved,       setFbSaved]       = useState(false)
-
-  // Debounce feedback save
-  useEffect(() => {
-    if (isCompleted) return
-    const timeout = setTimeout(async () => {
-      if (localFeedback === feedback) return
-      setSavingFb(true)
-      await onFeedbackChange(localFeedback)
-      setSavingFb(false)
-      setFbSaved(true)
-      setTimeout(() => setFbSaved(false), 1500)
-    }, 800)
-    return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localFeedback])
-
-  const handleStatus = async (s: ApprovalStatus) => {
-    if (isCompleted || savingStatus) return
-    setSavingStatus(true)
-    setLocalStatus(s)
-    await onStatusChange(s)
-    setSavingStatus(false)
-  }
-
-  const borderMap: Record<ApprovalStatus, string> = {
-    pending:  'border-gray-200',
-    approved: 'border-green-300',
-    rejected: 'border-red-300',
-  }
-
-  return (
-    <div className={`bg-white border-2 rounded-2xl shadow-sm overflow-hidden transition-all ${borderMap[localStatus]}`}>
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3 border-b border-gray-50 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Prévia do Feed</p>
-          <p className="text-xs text-gray-400 mt-0.5">Como o perfil vai ficar após as publicações</p>
-        </div>
-        {localStatus !== 'pending' && (
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
-            localStatus === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-          }`}>
-            {localStatus === 'approved' ? 'Aprovado' : 'Reprovado'}
-          </span>
-        )}
-      </div>
-
-      <div className="px-5 py-4 flex flex-col gap-4">
-        {/* Imagem da prévia */}
-        <div className="w-full rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="Prévia do feed" className="w-full object-contain" />
-        </div>
-
-        {/* Botões de aprovação */}
-        {!isCompleted && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleStatus('approved')}
-              disabled={savingStatus}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                localStatus === 'approved'
-                  ? 'bg-green-500 text-white'
-                  : 'border border-green-300 text-green-700 hover:bg-green-50'
-              }`}
-            >
-              Aprovar
-            </button>
-            <button
-              onClick={() => handleStatus('rejected')}
-              disabled={savingStatus}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                localStatus === 'rejected'
-                  ? 'bg-red-500 text-white'
-                  : 'border border-red-200 text-red-600 hover:bg-red-50'
-              }`}
-            >
-              Reprovar
-            </button>
-          </div>
-        )}
-
-        {/* Feedback */}
-        {isCompleted ? (
-          localFeedback ? (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-              <p className="text-xs font-semibold text-amber-700 mb-1">Seu comentário</p>
-              <p className="text-sm text-amber-800 whitespace-pre-wrap">{localFeedback}</p>
-            </div>
-          ) : null
-        ) : (
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-gray-400">
-                Comentário <span className="font-normal text-gray-300">(opcional)</span>
-              </label>
-              {savingFb && <span className="text-xs text-gray-300">Salvando...</span>}
-              {fbSaved && !savingFb && <span className="text-xs text-green-500">Salvo</span>}
-            </div>
-            <textarea
-              placeholder="Deixe aqui suas observações sobre o feed..."
-              value={localFeedback}
-              onChange={(e) => setLocalFeedback(e.target.value)}
-              rows={3}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent resize-none"
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ─── Página pública de aprovação final ───────────────────────────────────────
 export default function FinalApprovalPage() {
   const { token } = useParams<{ token: string }>()
@@ -432,21 +298,12 @@ export default function FinalApprovalPage() {
   const [finalized,  setFinalized]  = useState(false)
   const [finalError, setFinalError] = useState<string | null>(null)
 
-  // Estado local da prévia do feed (sincronizado com review ao carregar)
-  const [feedStatus,   setFeedStatus]   = useState<ApprovalStatus>('pending')
-  const [feedFeedback, setFeedFeedback] = useState<string>('')
-
   useEffect(() => {
     fetch(`/api/final-approve/${token}`)
       .then(async (r) => {
         if (!r.ok) { setNotFound(true); setLoading(false); return }
         const d = await r.json()
         setReview(d)
-        // Inicializa estado local da prévia do feed
-        if (d.feed_preview_url) {
-          setFeedStatus(d.feed_preview_status ?? 'pending')
-          setFeedFeedback(d.feed_preview_feedback ?? '')
-        }
         setLoading(false)
       })
       .catch(() => { setNotFound(true); setLoading(false) })
@@ -479,24 +336,6 @@ export default function FinalApprovalPage() {
         ...prev,
         items: prev.items.map((i) => i.id === itemId ? { ...i, client_feedback: feedback } : i),
       }
-    })
-  }, [token])
-
-  const handleFeedPreviewStatus = useCallback(async (status: ApprovalStatus) => {
-    setFeedStatus(status)
-    await fetch(`/api/final-approve/${token}/feed-preview`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ feed_preview_status: status }),
-    })
-  }, [token])
-
-  const handleFeedPreviewFeedback = useCallback(async (feedback: string) => {
-    setFeedFeedback(feedback)
-    await fetch(`/api/final-approve/${token}/feed-preview`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ feed_preview_feedback: feedback }),
     })
   }, [token])
 
@@ -559,14 +398,16 @@ export default function FinalApprovalPage() {
     )
   }
 
-  const isCompleted    = review.status === 'completed'
-  const stats          = getReviewStats(review.items)
-  const hasFeedPreview = !!review.feed_preview_url
-  const feedPreviewOk  = !hasFeedPreview || feedStatus !== 'pending'
-  const allReviewed    = stats.pending === 0 && feedPreviewOk
-  const canFinalize    = allReviewed && !isCompleted
+  const isCompleted = review.status === 'completed'
+  const stats       = getReviewStats(review.items)
+  // feed_preview_url é um recurso legado (upload manual): o campo continua
+  // existindo no banco só por compatibilidade/histórico com aprovações
+  // antigas, mas não é mais exibido nem editável na interface, e nunca
+  // bloqueia a finalização — que depende só dos conteúdos individuais.
+  const allReviewed = stats.pending === 0
+  const canFinalize = allReviewed && !isCompleted
 
-  const pendingCount = stats.pending + (hasFeedPreview && feedStatus === 'pending' ? 1 : 0)
+  const pendingCount = stats.pending
 
   // ── Tela de conclusão ─────────────────────────────────────────────────────
   if (isCompleted || finalized) {
@@ -631,33 +472,22 @@ export default function FinalApprovalPage() {
       {/* Itens */}
       <div className="max-w-xl mx-auto px-4 py-6 flex flex-col gap-5">
 
-        {/* Preview do feed — automático (principal) + imagem manual (opcional/legado).
-            Só representação visual do conjunto — a aprovação continua sendo feita
-            conteúdo por conteúdo, abaixo. */}
+        {/* Prévia de Feed — única visualização de conjunto (automática, a partir
+            das capas dos próprios conteúdos). Só representação visual — a
+            aprovação continua sendo feita conteúdo por conteúdo, abaixo. */}
         {review.items.some((i) => isInFeedGrid(i.type)) && (
           <div className="bg-white border-2 border-gray-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-5 pt-4 pb-3 border-b border-gray-50">
-              <p className="text-sm font-semibold text-gray-900">Preview do Feed</p>
-              <p className="text-xs text-gray-400 mt-0.5">Como o perfil vai ficar — mais recente primeiro</p>
+              <p className="text-sm font-semibold text-gray-900">Prévia de Feed</p>
+              <p className="text-xs text-gray-400 mt-0.5">Confira como ficará o feed deste mês 🩶</p>
             </div>
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 flex justify-center">
               <FeedGridPreview items={review.items} />
             </div>
           </div>
         )}
 
-        {hasFeedPreview && (
-          <FeedPreviewCard
-            imageUrl={review.feed_preview_url!}
-            status={feedStatus}
-            feedback={feedFeedback}
-            isCompleted={isCompleted}
-            onStatusChange={handleFeedPreviewStatus}
-            onFeedbackChange={handleFeedPreviewFeedback}
-          />
-        )}
-
-        {(review.items.some((i) => isInFeedGrid(i.type)) || hasFeedPreview) && review.items.length > 0 && (
+        {review.items.some((i) => isInFeedGrid(i.type)) && review.items.length > 0 && (
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-gray-100" />
             <span className="text-xs text-gray-300 font-medium whitespace-nowrap">Conteúdos individuais</span>

@@ -53,15 +53,31 @@ export function ItemFormFields({
 
     onChange({
       ...item, social_networks: newNetworks, type: newType, media_items: newMedia,
-      // Formato mudou → capa antiga (slide/frame) não corresponde mais a nada
-      feed_cover_url: newType === item.type ? item.feed_cover_url : null,
+      // Formato mudou → capa antiga (slide/frame) não corresponde mais a
+      // nada, e o ajuste de enquadramento (posição/zoom) pertencia a ela.
+      feed_cover_url:        newType === item.type ? item.feed_cover_url : null,
+      feed_cover_position_x: newType === item.type ? item.feed_cover_position_x : null,
+      feed_cover_position_y: newType === item.type ? item.feed_cover_position_y : null,
+      feed_cover_zoom:       newType === item.type ? item.feed_cover_zoom : null,
     })
   }
 
   const handleTypeChange = (type: ContentType) => {
     const newKind  = getMediaKind(type)
     const newMedia = newKind === 'none' ? [] : [EMPTY_MEDIA_ITEM()]
-    onChange({ ...item, type, media_items: newMedia, feed_cover_url: null })
+    onChange({
+      ...item, type, media_items: newMedia,
+      feed_cover_url: null, feed_cover_position_x: null, feed_cover_position_y: null, feed_cover_zoom: null,
+    })
+  }
+
+  // Capa mudou (novo slide escolhido no carrossel, ou nova capa/frame de
+  // vídeo) → o ajuste de enquadramento antigo pertencia à imagem anterior,
+  // não faz sentido reaproveitar pra uma capa diferente. Reinicia pro
+  // padrão junto — nenhuma API pra isso ainda, tudo em estado local do
+  // formulário (a review nem existe até "Gerar link de aprovação final").
+  const handleCoverChange = (url: string | null) => {
+    onChange({ ...item, feed_cover_url: url, feed_cover_position_x: null, feed_cover_position_y: null, feed_cover_zoom: null })
   }
 
   return (
@@ -136,7 +152,7 @@ export function ItemFormFields({
             folder={folder}
             itemIndex={itemKey}
             coverUrl={item.feed_cover_url}
-            onCoverChange={(url) => onChange({ ...item, feed_cover_url: url })}
+            onCoverChange={handleCoverChange}
           />
 
           {/* Capa do feed — só vídeo/reels/shorts (post usa a própria imagem,
@@ -146,7 +162,7 @@ export function ItemFormFields({
               <VideoCoverPicker
                 videoUrl={item.media_items[0].url}
                 coverUrl={item.feed_cover_url}
-                onCoverChange={(url) => onChange({ ...item, feed_cover_url: url })}
+                onCoverChange={handleCoverChange}
                 folder={folder}
                 itemIndex={itemKey}
               />

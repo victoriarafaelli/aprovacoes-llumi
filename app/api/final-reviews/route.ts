@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { v4 as uuidv4 } from 'uuid'
 import { FinalReviewItemFormData } from '@/types/final'
-import { sanitizeFeedCoverUrl } from '@/lib/feed-cover'
+import { sanitizeFeedCoverUrl, sanitizeFeedCoverAdjustmentValue } from '@/lib/feed-cover'
+import {
+  FEED_COVER_POSITION_MIN, FEED_COVER_POSITION_MAX, FEED_COVER_ZOOM_MIN, FEED_COVER_ZOOM_MAX,
+} from '@/types/final'
 
 // GET /api/final-reviews — Lista todas as aprovações finais
 export async function GET() {
@@ -78,6 +81,13 @@ export async function POST(request: NextRequest) {
       // projeto/bucket/review (vídeo) — ver lib/feed-cover.ts. A pasta é a
       // mesma storage_folder já validada acima pra esta review inteira.
       feed_cover_url:  sanitizeFeedCoverUrl(item.type, mediaItems, item.feed_cover_url, storage_folder || null),
+      // Ajuste de enquadramento definido durante a criação (estado local do
+      // formulário, ver /final/criar) — mesma sanitização usada em qualquer
+      // outra rota que grava esses campos. Item novo, então não há "capa
+      // antiga" pra comparar — só normaliza o que veio do cliente.
+      feed_cover_position_x: sanitizeFeedCoverAdjustmentValue(item.feed_cover_position_x, FEED_COVER_POSITION_MIN, FEED_COVER_POSITION_MAX),
+      feed_cover_position_y: sanitizeFeedCoverAdjustmentValue(item.feed_cover_position_y, FEED_COVER_POSITION_MIN, FEED_COVER_POSITION_MAX),
+      feed_cover_zoom:       sanitizeFeedCoverAdjustmentValue(item.feed_cover_zoom, FEED_COVER_ZOOM_MIN, FEED_COVER_ZOOM_MAX),
       approval_status: 'pending' as const,
       client_feedback: null,
       order_position:  index,

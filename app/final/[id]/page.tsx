@@ -24,6 +24,8 @@ import {
   EMPTY_MEDIA_ITEM,
   EMPTY_ITEM,
   isInFeedGrid,
+  resolveFeedCoverUrl,
+  resolveFeedCoverAdjustment,
 } from '@/types/final'
 import type { ContentType } from '@/types/final'
 import { MediaUploadSlot } from '@/components/MediaUploadSlot'
@@ -32,7 +34,8 @@ import { MarkdownField } from '@/components/MarkdownField'
 import { ItemFormFields } from '@/components/ItemFormFields'
 import { MultiSlideFields } from '@/components/MediaUploadFields'
 import { VideoCoverPicker } from '@/components/VideoCoverPicker'
-import { FeedGridPreview } from '@/components/FeedGridPreview'
+import { FeedGridPreview, FeedGridPreviewItem } from '@/components/FeedGridPreview'
+import { FeedCoverAdjustModal } from '@/components/FeedCoverAdjustModal'
 
 type ReviewStatus = 'draft' | 'sent' | 'completed'
 type FilterTab    = 'all' | 'pending' | 'approved' | 'rejected'
@@ -709,7 +712,13 @@ function ItemCard({
 // ─── Prévia de Feed (automática, principal) ──────────────────────────────────
 // Montada a partir das capas dos próprios conteúdos — sem upload manual.
 // Puramente visual: sem aprovar/reprovar/comentar aqui.
-function AutoFeedPreviewCard({ items }: { items: FinalReviewItem[] }) {
+function AutoFeedPreviewCard({
+  items,
+  onAdjustCover,
+}: {
+  items: FinalReviewItem[]
+  onAdjustCover: (item: FeedGridPreviewItem, originalIndex: number) => void
+}) {
   if (!items.some((i) => isInFeedGrid(i.type))) return null
 
   return (
@@ -719,7 +728,7 @@ function AutoFeedPreviewCard({ items }: { items: FinalReviewItem[] }) {
         <p className="text-xs text-gray-400 mt-0.5">Confira como ficará o feed deste mês 🩶</p>
       </div>
       <div className="px-5 py-4 flex justify-center">
-        <FeedGridPreview items={items} />
+        <FeedGridPreview items={items} editable onAdjustCover={onAdjustCover} />
       </div>
     </div>
   )
@@ -737,6 +746,9 @@ export default function FinalDetailPage() {
   const [reordering, setReordering] = useState(false)
   const [editing, setEditing]       = useState<FinalReviewItem | null>(null)
   const [adding, setAdding]         = useState(false)
+  const [adjusting, setAdjusting]   = useState<FinalReviewItem | null>(null)
+  const [adjustSaving, setAdjustSaving] = useState(false)
+  const [adjustError, setAdjustError]   = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/final-reviews/${id}`)
@@ -787,6 +799,33 @@ export default function FinalDetailPage() {
       })
     } catch { /* silencioso */ }
   }, [id])
+
+  // PATCH só dos 3 campos de ajuste — nunca toca feed_cover_url, então
+  // nunca aciona o reset-por-troca-de-capa no servidor.
+  const saveAdjustment = async (adj: { positionX: number; positionY: number; zoom: number }) => {
+    if (!adjusting) return
+    setAdjustSaving(true)
+    setAdjustError(null)
+    try {
+      const res = await fetch(`/api/final-reviews/${id}/items/${adjusting.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          feed_cover_position_x: adj.positionX,
+          feed_cover_position_y: adj.positionY,
+          feed_cover_zoom:       adj.zoom,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setAdjustError(data.error || 'Erro ao salvar ajuste.'); setAdjustSaving(false); return }
+      updateItem({ ...adjusting, ...data })
+      setAdjusting(null)
+    } catch {
+      setAdjustError('Erro de conexão. Tente novamente.')
+    } finally {
+      setAdjustSaving(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -977,7 +1016,15 @@ export default function FinalDetailPage() {
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4">
         {/* Prévia de Feed — única visualização de conjunto, sempre visível no
             topo, fora do filtro. */}
-        {filter === 'all' && <AutoFeedPreviewCard items={review.items} />}
+        {filter === 'all' && (
+          <AutoFeedPreviewCard
+            items={review.items}
+            onAdjustCover={(_, originalIndex) => {
+              setAdjustError(null)
+              setAdjusting(review.items[originalIndex])
+            }}
+          />
+        )}
 
         {filter === 'all' && review.items.length > 0 &&
          review.items.some((i) => isInFeedGrid(i.type)) && (
@@ -1024,6 +1071,20 @@ export default function FinalDetailPage() {
             setEditing(null)
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {/* Modal de ajuste de enquadramento — dispara um PATCH só dos 3 campos
+          de posição/zoom, nunca toca feed_cover_url (ver saveAdjustment). */}
+      {adjusting && resolveFeedCoverUrl(adjusting) && (
+        <FeedCoverAdjustModal
+          key={adjusting.id}
+          imageUrl={resolveFeedCoverUrl(adjusting)!}
+          initial={resolveFeedCoverAdjustment(adjusting)}
+          saving={adjustSaving}
+          error={adjustError}
+          onClose={() => { setAdjusting(null); setAdjustError(null) }}
+          onSave={saveAdjustment}
         />
       )}
 

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { FinalReviewItemFormData } from '@/types/final'
-import { sanitizeFeedCoverUrl, resolveStorageFolder } from '@/lib/feed-cover'
+import { sanitizeFeedCoverUrl, sanitizeFeedCoverAdjustmentValue, resolveStorageFolder } from '@/lib/feed-cover'
+import {
+  FEED_COVER_POSITION_MIN, FEED_COVER_POSITION_MAX, FEED_COVER_ZOOM_MIN, FEED_COVER_ZOOM_MAX,
+} from '@/types/final'
 
 /**
  * POST /api/final-reviews/[id]/items
@@ -126,6 +129,11 @@ export async function POST(
         item.type, mediaItems, item.feed_cover_url,
         resolveStorageFolder(id, review.storage_folder)
       ),
+      // Item novo — mesma sanitização de qualquer outra rota que grava
+      // esses campos, sem "capa antiga" pra comparar (ver lib/feed-cover.ts).
+      feed_cover_position_x: sanitizeFeedCoverAdjustmentValue(item.feed_cover_position_x, FEED_COVER_POSITION_MIN, FEED_COVER_POSITION_MAX),
+      feed_cover_position_y: sanitizeFeedCoverAdjustmentValue(item.feed_cover_position_y, FEED_COVER_POSITION_MIN, FEED_COVER_POSITION_MAX),
+      feed_cover_zoom:       sanitizeFeedCoverAdjustmentValue(item.feed_cover_zoom, FEED_COVER_ZOOM_MIN, FEED_COVER_ZOOM_MAX),
       approval_status: 'pending' as const,
       client_feedback: null,
       order_position:  nextPosition,

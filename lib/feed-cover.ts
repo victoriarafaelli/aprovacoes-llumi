@@ -87,3 +87,25 @@ export function sanitizeFeedCoverUrl(
 
   return null
 }
+
+/**
+ * Sanitiza um valor de ajuste de enquadramento (posição X/Y ou zoom) da
+ * Prévia de Feed antes de gravar no banco. Como esses valores vêm direto do
+ * navegador (arrastar/zoom no cliente), nunca confiamos neles crus:
+ *
+ *   - só aceita `number` finito — string, CSS, HTML ou qualquer outro tipo
+ *     vira null (mesmo espírito "corrige sozinho" de sanitizeFeedCoverUrl,
+ *     nunca lança erro/rejeita a requisição inteira);
+ *   - valores numéricos fora do intervalo são normalizados (clamp) pro
+ *     limite mais próximo, em vez de rejeitados — um 200 vira 100, não vira
+ *     null, porque é claramente uma tentativa válida de "máximo".
+ */
+export function sanitizeFeedCoverAdjustmentValue(
+  value: unknown,
+  min: number,
+  max: number
+): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.min(max, Math.max(min, value))
+}

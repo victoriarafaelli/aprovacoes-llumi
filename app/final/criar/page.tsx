@@ -2,9 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { FinalReviewItemFormData, EMPTY_ITEM, getMediaKind, isInFeedGrid } from '@/types/final'
+import {
+  FinalReviewItemFormData, EMPTY_ITEM, getMediaKind, isInFeedGrid,
+  resolveFeedCoverUrl, resolveFeedCoverAdjustment,
+} from '@/types/final'
 import { ItemFormFields } from '@/components/ItemFormFields'
-import { FeedGridPreview } from '@/components/FeedGridPreview'
+import { FeedGridPreview, FeedGridPreviewItem } from '@/components/FeedGridPreview'
+import { FeedCoverAdjustModal } from '@/components/FeedCoverAdjustModal'
 
 // ─── Card de item ─────────────────────────────────────────────────────────────
 function ItemCard({
@@ -73,7 +77,13 @@ function ItemCard({
 // Mesmo título/subtítulo/visual já publicado em /final/[id] e
 // /final/aprovar/[token] — só antecipa a mesma experiência para a criação,
 // sem chamar API nem salvar nada: reage a qualquer mudança em `items`.
-function LiveFeedPreviewCard({ items }: { items: FinalReviewItemFormData[] }) {
+function LiveFeedPreviewCard({
+  items,
+  onAdjustCover,
+}: {
+  items: FinalReviewItemFormData[]
+  onAdjustCover: (item: FeedGridPreviewItem, originalIndex: number) => void
+}) {
   if (!items.some((i) => isInFeedGrid(i.type))) return null
   return (
     <div className="bg-white border-2 border-gray-100 rounded-2xl shadow-sm overflow-hidden">
@@ -82,7 +92,7 @@ function LiveFeedPreviewCard({ items }: { items: FinalReviewItemFormData[] }) {
         <p className="text-xs text-gray-400 mt-0.5">Confira como ficará o feed deste mês 🩶</p>
       </div>
       <div className="px-5 py-4 flex justify-center">
-        <FeedGridPreview items={items} />
+        <FeedGridPreview items={items} editable onAdjustCover={onAdjustCover} />
       </div>
     </div>
   )
@@ -104,6 +114,7 @@ export default function FinalCriarPage() {
   const [shareLink,       setShareLink]       = useState<string | null>(null)
   const [copied,          setCopied]          = useState(false)
   const [error,           setError]           = useState<string | null>(null)
+  const [adjustingIndex,  setAdjustingIndex]  = useState<number | null>(null)
 
   const addItem    = () => setItems((prev) => [...prev, EMPTY_ITEM()])
   const updateItem = (i: number, data: FinalReviewItemFormData) =>
@@ -246,7 +257,7 @@ export default function FinalCriarPage() {
           {/* Prévia de Feed — só em mobile/tablet, entre Informações e Conteúdos.
               Em desktop ela vive na aside sticky ao lado (mesmo componente). */}
           <div className="lg:hidden">
-            <LiveFeedPreviewCard items={items} />
+            <LiveFeedPreviewCard items={items} onAdjustCover={(_, idx) => setAdjustingIndex(idx)} />
           </div>
 
           {/* Conteúdos */}
@@ -297,9 +308,30 @@ export default function FinalCriarPage() {
         {/* Prévia de Feed — desktop, coluna fixa e sticky (não sobrepõe: fica
             abaixo do header sticky e some em telas menores que lg). */}
         <aside className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
-          <LiveFeedPreviewCard items={items} />
+          <LiveFeedPreviewCard items={items} onAdjustCover={(_, idx) => setAdjustingIndex(idx)} />
         </aside>
       </div>
+
+      {/* Ajuste de enquadramento — review ainda não existe, então salva
+          direto no estado local do formulário (sem API). Só é enviado ao
+          servidor quando "Gerar link de aprovação final" for clicado. */}
+      {adjustingIndex !== null && items[adjustingIndex] && resolveFeedCoverUrl(items[adjustingIndex]) && (
+        <FeedCoverAdjustModal
+          key={adjustingIndex}
+          imageUrl={resolveFeedCoverUrl(items[adjustingIndex])!}
+          initial={resolveFeedCoverAdjustment(items[adjustingIndex])}
+          onClose={() => setAdjustingIndex(null)}
+          onSave={(adj) => {
+            updateItem(adjustingIndex, {
+              ...items[adjustingIndex],
+              feed_cover_position_x: adj.positionX,
+              feed_cover_position_y: adj.positionY,
+              feed_cover_zoom:       adj.zoom,
+            })
+            setAdjustingIndex(null)
+          }}
+        />
+      )}
     </main>
   )
 }
